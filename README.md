@@ -25,10 +25,6 @@
 3. 浏览器访问 `http://localhost:4173`，点击右下角“AI 阅读助手”呼出聊天，助手自动基于当前文章对话，无需前端填写 Key。  
 4. 若请求失败，请检查终端日志确认 `.env` 已生效、网络可访问 DeepSeek。
 
-## AI 助手提示词与行为
-- 内置提示词（费曼式辅导）：`You are a Feynman-style reading tutor...`，流程为“让用户复述 → 要求举例/类比 → 指出遗漏与误解 → 给 1-2 个自测问题”。可在 `src/app.js` 的 `ASSISTANT_SYSTEM_PROMPT` 中调整。  
-- 对话入口：右侧 AI 面板，填充上下文（手动或“使用当前文章”），在输入框中复述/提问后 Ctrl/Cmd+Enter 发送。  
-- 请求路径：前端固定调用后端 `/api/assistant`，由后端转发到 DeepSeek（Key 仅在 `.env`）。
 
 ## 词典数据
 - 应用优先加载 `data/ecdict-dictionary.json`，若不存在则回退到 `data/sample-dictionary.json` 的演示词条。
