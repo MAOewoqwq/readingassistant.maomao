@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "start": "node server/index.js",
     "build:dictionary": "node scripts/build-dictionary.js",
     "build:css": "npx @tailwindcss/cli -i src/input.css -o src/styles.css --minify",
     "watch:css": "npx @tailwindcss/cli -i src/input.css -o src/styles.css --watch",

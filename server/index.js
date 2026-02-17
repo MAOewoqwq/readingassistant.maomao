@@ -14,7 +14,7 @@ const envPath = path.join(rootDir, '.env');
 
 loadEnv(envPath);
 
-const PORT = Number(process.env.PORT || 4173);
+const PORT = Number(process.env.PORT || 3000);
 const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/+$/, '');
 const YOUDAO_BASE_URL = (process.env.YOUDAO_BASE_URL || 'https://openapi.youdao.com/api').trim().replace(/\/+$/, '');
