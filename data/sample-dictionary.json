@@ -1,0 +1,119 @@
+[
+  {
+    "word": "chaos",
+    "phonetics": "/ˈkeɪ.ɒs/",
+    "meanings": [
+      {
+        "pos": "n.",
+        "zh": "混乱，混沌"
+      }
+    ],
+    "derivatives": [
+      {
+        "word": "chaotic",
+        "pos": "adj.",
+        "zh": "混乱"
+      },
+      {
+        "word": "chaotically",
+        "pos": "adv.",
+        "zh": "混乱"
+      }
+    ]
+  },
+  {
+    "word": "study",
+    "phonetics": "/ˈstʌd.i/",
+    "meanings": [
+      {
+        "pos": "v.",
+        "zh": "学习，研究"
+      },
+      {
+        "pos": "n.",
+        "zh": "学习，书房"
+      }
+    ],
+    "derivatives": [
+      {
+        "word": "student",
+        "pos": "n.",
+        "zh": "学生"
+      },
+      {
+        "word": "studious",
+        "pos": "adj.",
+        "zh": "勤奋"
+      },
+      {
+        "word": "studiously",
+        "pos": "adv.",
+        "zh": "勤奋"
+      }
+    ],
+    "variants": [
+      "studies",
+      "studying",
+      "studied"
+    ]
+  },
+  {
+    "word": "learn",
+    "phonetics": "/lɜːn/",
+    "meanings": [
+      {
+        "pos": "v.",
+        "zh": "学习，得知"
+      }
+    ],
+    "derivatives": [
+      {
+        "word": "learner",
+        "pos": "n.",
+        "zh": "学习者"
+      },
+      {
+        "word": "learning",
+        "pos": "n.",
+        "zh": "学问，学习"
+      }
+    ],
+    "variants": [
+      "learns",
+      "learning",
+      "learned",
+      "learnt"
+    ]
+  },
+  {
+    "word": "practice",
+    "phonetics": "/ˈpræk.tɪs/",
+    "meanings": [
+      {
+        "pos": "n.",
+        "zh": "练习，实践"
+      },
+      {
+        "pos": "v.",
+        "zh": "练习，实行"
+      }
+    ],
+    "derivatives": [
+      {
+        "word": "practical",
+        "pos": "adj.",
+        "zh": "实用"
+      },
+      {
+        "word": "practically",
+        "pos": "adv.",
+        "zh": "实际"
+      }
+    ],
+    "variants": [
+      "practices",
+      "practiced",
+      "practicing"
+    ]
+  }
+]

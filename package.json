@@ -1,0 +1,20 @@
+{
+  "name": "english-reader-assistant",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build:dictionary": "node scripts/build-dictionary.js",
+    "build:css": "npx @tailwindcss/cli -i src/input.css -o src/styles.css --minify",
+    "watch:css": "npx @tailwindcss/cli -i src/input.css -o src/styles.css --watch",
+    "dev:server": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "dependencies": {
+    "csv-parse": "^5.5.3",
+    "kuromoji": "^0.1.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.18",
+    "tailwindcss": "^4.1.18"
+  }
+}

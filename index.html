@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>多语阅读助手</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+  <!-- System font stack (Notion-style), no external fonts needed -->
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js" defer></script>
+  <script type="module" src="./src/app.js" defer></script>
+</head>
+<body>
+  <div id="welcomeOverlay" class="welcome-overlay" aria-hidden="false">
+    <div class="welcome-stage">
+      <p id="welcomeLine" class="welcome-line" aria-live="polite">欢迎来到多语阅读助手</p>
+      <p id="welcomeHint" class="welcome-hint" data-i18n="welcomeTapHint">点击继续</p>
+    </div>
+  </div>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="top-title-row">
+          <h1 id="appTitle" data-i18n="appTitle">多语阅读助手</h1>
+          <button id="renameAssistantBtnTop" class="assistant-rename-inline" title="重命名助手">✎</button>
+        </div>
+      </div>
+      <div class="controls">
+        <label class="language-switch" for="languageSelect">
+          <span data-i18n="readingLanguage">阅读语言</span>
+          <select id="languageSelect">
+            <option value="en" data-i18n="english">英语</option>
+            <option value="zh" data-i18n="chinese">中文</option>
+            <option value="ja" data-i18n="japanese">日语</option>
+          </select>
+        </label>
+        <label class="language-switch" for="displayLanguageSelect">
+          <span class="globe-icon">🌐</span>
+          <select id="displayLanguageSelect">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+          </select>
+        </label>
+        <button id="bookTestBtn" class="ghost-btn icon-action-btn" data-i18n-title="bookTest" title="书籍测试" aria-label="书籍测试">📚</button>
+        <button id="savedLogToggleBtn" class="ghost-btn icon-action-btn" data-i18n-title="savedLogNav" title="生词日志" aria-label="生词日志">🧾</button>
+        <button id="clearCacheBtn" class="ghost-btn icon-action-btn" data-i18n-title="clearCache" title="清除缓存" aria-label="清除缓存">🗑</button>
+        <span id="authUserLabel" class="auth-user-label"></span>
+        <button id="authLoginBtn" class="ghost-btn small">注册 / 登录</button>
+        <button id="authLogoutBtn" class="ghost-btn small" hidden>退出</button>
+      </div>
+    </header>
+
+    <section class="input-panel">
+      <textarea id="textInput" data-i18n-placeholder="textInputPlaceholder" placeholder="在此粘贴英文、中文或日文文章..." rows="6"></textarea>
+      <div class="input-actions">
+        <button id="loadTextBtn" class="primary-btn" data-i18n="loadText">载入文本</button>
+        <button id="bionicToggleBtn" class="ghost-btn icon-only" title="ADHD Mode">👁</button>
+        <div class="hints">
+          <p class="hint" data-i18n="inputHint">支持英文 / 中文 / 日文的纯文本文件或直接粘贴内容，系统会保留原有标点。</p>
+          <p id="pdfStatus" class="hint pdf-status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <main class="content-grid">
+      <section class="article-pane">
+        <div id="articleContainer" class="article-content empty-state">
+          <p data-i18n="articlePlaceholder">请先上传或粘贴英文 / 中文 / 日文文本，点击词语即可查看对应阅读语言的释义（英文内置词典 + 有道翻译）。</p>
+        </div>
+      </section>
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h2 data-i18n="wordCollection">生词集合</h2>
+          <button id="exportBtn" class="primary-btn secondary" data-i18n="saveWords">保存</button>
+        </div>
+        <div id="exportStatus" class="export-status" aria-live="polite"></div>
+        <div id="wordList" class="word-list empty-state">
+          <p data-i18n="noWordsYet">尚未收集生词，点击文章中的单词后会自动记录。</p>
+        </div>
+      </aside>
+    </main>
+
+    <div id="savedLogBackdrop" class="saved-log-backdrop" aria-hidden="true"></div>
+    <nav id="savedLogDrawer" class="saved-log-drawer" aria-hidden="true">
+      <div class="saved-log-tabs" role="tablist" aria-label="日志类型">
+        <div class="saved-log-language-dropdown">
+          <button id="savedLogWordsTab" class="saved-log-tab saved-log-tab-with-toggle active" type="button" data-log-tab="words" data-i18n="savedWordsTab" aria-haspopup="true" aria-expanded="false">单词</button>
+          <div id="savedLogWordLanguageTabs" class="saved-log-language-menu" hidden>
+            <button class="saved-log-language-item active" type="button" data-word-language-filter="all" data-i18n="allLanguagesTab">全部</button>
+            <button class="saved-log-language-item" type="button" data-word-language-filter="zh" data-i18n="chinese">中文</button>
+            <button class="saved-log-language-item" type="button" data-word-language-filter="en" data-i18n="english">英语</button>
+            <button class="saved-log-language-item" type="button" data-word-language-filter="ja" data-i18n="japanese">日语</button>
+          </div>
+        </div>
+        <button id="savedLogConversationsTab" class="saved-log-tab" type="button" data-log-tab="conversations" data-i18n="savedConversationsTab">聊天记录</button>
+      </div>
+      <div id="savedWordList" class="word-list saved-word-list empty-state">
+        <p data-i18n="noSavedWordsYet">暂无已保存生词，点击保存后可再次查看</p>
+      </div>
+      <div id="savedConversationList" class="word-list saved-conversation-list empty-state" hidden>
+        <p data-i18n="noSavedConversationsYet">暂无聊天存档，点击存档后可再次查看</p>
+      </div>
+      <div class="saved-log-drawer-header">
+        <div class="saved-log-drawer-actions">
+          <button id="savedLogDateBtn" class="ghost-btn small" data-i18n-title="filterByDate" title="按日期筛选" aria-label="按日期筛选">📅</button>
+          <input id="savedLogDateInput" class="saved-log-date-input" type="date" />
+          <button id="clearSavedBtn" class="ghost-btn small" data-i18n="clearSavedLog">清空全部</button>
+          <button id="savedLogCloseBtn" class="icon-btn" aria-label="关闭日志抽屉">&times;</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="assistant-fab-wrap">
+      <button id="emojiToggle" class="emoji-toggle" aria-label="选择头像">‹</button>
+      <div id="emojiPicker" class="emoji-arc">
+        <button type="button" class="emoji-pick" data-emoji="🐬" style="--i:0">🐬</button>
+        <button type="button" class="emoji-pick" data-emoji="🐱" style="--i:1">🐱</button>
+        <button type="button" class="emoji-pick" data-emoji="🐶" style="--i:2">🐶</button>
+        <button type="button" class="emoji-pick" data-emoji="🦈" style="--i:3">🦈</button>
+        <button type="button" class="emoji-pick" data-emoji="🦊" style="--i:4">🦊</button>
+        <button type="button" class="emoji-pick" data-emoji="👻" style="--i:5">👻</button>
+        <button type="button" class="emoji-pick" data-emoji="🤖" style="--i:6">🤖</button>
+        <button type="button" class="emoji-pick" data-emoji="🐼" style="--i:7">🐼</button>
+      </div>
+      <button id="aiToggleBtn" class="assistant-fab" aria-label="AI 助手">🤖</button>
+    </div>
+
+    <div id="assistantDrawer" class="assistant-drawer" aria-hidden="true">
+      <div class="assistant-panel">
+        <div class="assistant-header">
+          <div class="assistant-header-left">
+            <span id="assistantAvatar" class="assistant-avatar">🤖</span>
+            <div>
+              <div class="assistant-title-row">
+                <h3 data-i18n="aiReadingAssistant">AI 读书助手</h3>
+                <button id="renameAssistantBtn" class="assistant-rename-inline" title="重命名助手">✎</button>
+              </div>
+            </div>
+          </div>
+          <button id="aiCloseBtn" class="icon-btn" aria-label="关闭助手">&times;</button>
+        </div>
+
+        <div id="aiMessages" class="assistant-messages"></div>
+
+        <div id="aiStatus" class="assistant-status" aria-live="polite"></div>
+
+        <div class="assistant-input">
+          <textarea id="aiUserInput" rows="3" data-i18n-placeholder="aiInputPlaceholder" placeholder="用自己的话复述，或向助手提问（Enter 发送，Shift+Enter 换行）"></textarea>
+        </div>
+
+        <div class="assistant-toolbar">
+          <button id="clearConversationBtn" class="assistant-tool-btn" data-i18n="clearChat" title="清除对话">🗑</button>
+          <button id="exportReportBtn" class="assistant-tool-btn" data-i18n="exportReport" disabled title="存档">📌</button>
+          <div id="reportStatus" class="assistant-status" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="assistantRenameModal" class="modal" aria-hidden="true">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 data-i18n="renameAssistant">重命名助手</h3>
+          <button id="renameModalClose" class="icon-btn" aria-label="关闭重命名弹窗">&times;</button>
+        </div>
+        <div class="modal-body">
+          <label class="modal-field" for="assistantNameInput">
+            <span data-i18n="assistantName">助手名称</span>
+            <input id="assistantNameInput" type="text" data-i18n-placeholder="assistantNamePlaceholder" placeholder="例如：阅读搭子" />
+          </label>
+        </div>
+        <div class="modal-footer">
+          <button id="renameModalCancel" class="ghost-btn" data-i18n="cancel">取消</button>
+          <button id="renameModalSave" class="primary-btn secondary" data-i18n="saveName">保存名称</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="authModal" class="modal" aria-hidden="true">
+      <div class="modal-content auth-modal-content">
+        <div class="modal-header">
+          <h3 data-i18n="authModalTitle">注册 / 登录</h3>
+          <button id="authModalClose" class="icon-btn" aria-label="关闭登录弹窗">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="auth-mode-switch" role="tablist" aria-label="登录模式">
+            <button id="authModeLoginBtn" class="auth-mode-btn active" type="button" data-auth-mode="login" data-i18n="authModeLogin">登录</button>
+            <button id="authModeRegisterBtn" class="auth-mode-btn" type="button" data-auth-mode="register" data-i18n="authModeRegister">注册</button>
+          </div>
+          <label class="modal-field" for="authUsernameInput">
+            <span data-i18n="authUsername">用户名</span>
+            <input id="authUsernameInput" type="text" autocomplete="username" data-i18n-placeholder="authUsernamePlaceholder" placeholder="请输入用户名" />
+          </label>
+          <label class="modal-field" for="authPasswordInput">
+            <span data-i18n="authPassword">密码</span>
+            <input id="authPasswordInput" type="password" autocomplete="current-password" data-i18n-placeholder="authPasswordPlaceholder" placeholder="请输入密码" />
+          </label>
+          <p id="authModalHint" class="auth-modal-hint"></p>
+        </div>
+        <div class="modal-footer">
+          <button id="authModalCancel" class="ghost-btn" data-i18n="cancel">取消</button>
+          <button id="authModalSubmit" class="primary-btn secondary" data-i18n="authSubmitLogin">登录</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="bookTestModal" class="modal" aria-hidden="true">
+      <div class="modal-content book-modal">
+        <div class="modal-header">
+          <h3 data-i18n="bookTest">书籍测试</h3>
+          <button id="bookTestClose" class="icon-btn" aria-label="关闭书籍测试弹窗">&times;</button>
+        </div>
+        <div class="modal-body book-test-body">
+          <label class="modal-field" for="bookPersonality">
+            <span data-i18n="yourPersonality">你的性格</span>
+            <input id="bookPersonality" type="text" data-i18n-placeholder="personalityPlaceholder" placeholder="如：内向、喜欢安静思考" />
+          </label>
+          <label class="modal-field" for="bookInterests">
+            <span data-i18n="interests">兴趣爱好</span>
+            <input id="bookInterests" type="text" data-i18n-placeholder="interestsPlaceholder" placeholder="如：科幻、商业、心理学" />
+          </label>
+          <label class="modal-field" for="bookLanguage">
+            <span data-i18n="readingLanguage">阅读语言</span>
+            <select id="bookLanguage">
+              <option value="en" data-i18n="english">英语</option>
+              <option value="zh" data-i18n="chinese">中文</option>
+              <option value="ja" data-i18n="japanese">日语</option>
+            </select>
+          </label>
+          <label class="modal-field" for="bookLevel">
+            <span data-i18n="languageLevel">语言等级</span>
+            <select id="bookLevel">
+              <option value="A1-A2">A1~A2（入门-初级）</option>
+              <option value="B1-B2" selected>B1~B2（中级-中高级）</option>
+              <option value="C1-C2">C1~C2（高级-超高级）</option>
+            </select>
+          </label>
+          <label class="modal-field" for="bookTopic">
+            <span data-i18n="recentTopics">近期关注的话题</span>
+            <input id="bookTopic" type="text" data-i18n-placeholder="topicsPlaceholder" placeholder="如：AI、可持续、创业" />
+          </label>
+          <div id="bookTestStatus" class="assistant-status" aria-live="polite"></div>
+          <div id="bookTestResults" class="book-results" aria-live="polite"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="bookTestCancel" class="ghost-btn" data-i18n="cancel">取消</button>
+          <button id="bookTestSubmit" class="primary-btn secondary" data-i18n="generateRecommendations">生成推荐</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="conversationDetailModal" class="archive-detail-modal" aria-hidden="true">
+      <div class="archive-detail-panel">
+        <div class="archive-detail-header">
+          <h3 data-i18n="archiveDetailTitle">聊天存档详情</h3>
+          <button id="conversationDetailCloseBtn" class="icon-btn" aria-label="关闭聊天详情">&times;</button>
+        </div>
+        <div class="archive-detail-body">
+          <h4 id="conversationDetailHeadline" class="archive-detail-headline">阅读随记</h4>
+          <p id="conversationDetailMeta" class="archive-detail-meta"></p>
+
+          <section class="archive-detail-section">
+            <h5 data-i18n="archiveDetailSummary">想法与回复总结</h5>
+            <p id="conversationDetailSummary"></p>
+          </section>
+
+          <section class="archive-detail-section">
+            <h5 data-i18n="archiveDetailEvaluation">中性客观评价</h5>
+            <p id="conversationDetailEvaluation"></p>
+          </section>
+
+          <section class="archive-detail-section archive-messages-section">
+            <details id="conversationDetailMessagesPanel" class="archive-messages-panel">
+              <summary data-i18n="archiveDetailMessages">完整聊天记录</summary>
+              <div id="conversationDetailMessages" class="conversation-detail-list"></div>
+            </details>
+          </section>
+
+          <section class="archive-detail-section">
+            <h5 data-i18n="archiveDetailReflection">回顾感想</h5>
+            <textarea
+              id="conversationDetailReflection"
+              class="archive-reflection-input"
+              data-i18n-placeholder="archiveDetailReflectionPlaceholder"
+              placeholder="看完聊天记录后，写下你的回顾、收获或下一步计划..."
+            ></textarea>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="tooltip" class="word-tooltip" role="dialog" aria-hidden="true">
+      <div class="tooltip-content">
+        <div class="tooltip-header">
+          <div class="tooltip-title-row">
+            <h3 id="tooltipWord"></h3>
+            <div class="tooltip-actions">
+              <button id="playUkBtn" class="icon-btn play-btn" title="英式发音">英</button>
+              <button id="playUsBtn" class="icon-btn play-btn" title="美式发音">美</button>
+            </div>
+          </div>
+          <button id="closeTooltipBtn" class="icon-btn" aria-label="关闭">&times;</button>
+        </div>
+        <div id="tooltipBody" class="tooltip-body"></div>
+      </div>
+    </div>
+
+    <div id="onboardingOverlay" class="onboarding-overlay" aria-hidden="true">
+      <div id="onboardingSpotlight" class="onboarding-spotlight"></div>
+      <div id="onboardingCard" class="onboarding-card" role="dialog" aria-modal="true">
+        <p id="onboardingStep" class="onboarding-step"></p>
+        <h3 id="onboardingTitle" class="onboarding-title"></h3>
+        <p id="onboardingDescription" class="onboarding-description"></p>
+        <div class="onboarding-actions">
+          <button id="onboardingSkipBtn" class="ghost-btn small" type="button"></button>
+          <button id="onboardingNextBtn" class="primary-btn secondary" type="button"></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
