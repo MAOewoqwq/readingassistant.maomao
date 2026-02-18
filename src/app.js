@@ -3801,6 +3801,51 @@ function shouldFetchTranslation(key, targetLanguage, detail, usedDictionary) {
   return !state.translationCache.has(cacheKey);
 }
 
+function buildAssistantTranslationMessages(text, sourceLanguage = 'auto', targetLanguage = 'zh') {
+  const sourceMap = {
+    ja: 'Japanese',
+    en: 'English',
+    zh: 'Chinese',
+    auto: 'source language',
+  };
+  const targetMap = {
+    zh: 'Chinese',
+    en: 'English',
+    ja: 'Japanese',
+  };
+  const sourceLabel = sourceMap[sourceLanguage] || sourceMap.auto;
+  const targetLabel = targetMap[targetLanguage] || targetMap.zh;
+  return [
+    {
+      role: 'system',
+      content: `You are a precise translator. Translate from ${sourceLabel} to ${targetLabel}. Return only the translation text.`,
+    },
+    {
+      role: 'user',
+      content: text,
+    },
+  ];
+}
+
+async function fetchAssistantTranslation(text, sourceLanguage, targetLanguage) {
+  const endpoint = state.assistant?.proxyUrl || DEFAULT_ASSISTANT_CONFIG.proxyUrl;
+  const payload = {
+    model: state.assistant?.model || DEFAULT_ASSISTANT_CONFIG.model,
+    temperature: 0.2,
+    messages: buildAssistantTranslationMessages(text, sourceLanguage, targetLanguage),
+  };
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  return String(data?.reply || data?.choices?.[0]?.message?.content || '').trim();
+}
+
 async function fetchGroqTranslation(word, sourceLanguage, targetLanguage = state.language) {
   const q = String(word || '').trim();
   if (!q) {
@@ -3818,16 +3863,26 @@ async function fetchGroqTranslation(word, sourceLanguage, targetLanguage = state
   };
 
   try {
-    const res = await fetch(TRANSLATE_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}`);
+    let translation = '';
+    let source = 'translate';
+
+    try {
+      const res = await fetch(TRANSLATE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      translation = String(data?.translation || data?.reply || '').trim();
+    } catch (error) {
+      console.warn('[Translate] /api/translate failed, fallback to assistant:', error);
+      translation = await fetchAssistantTranslation(q, sourceLanguage, targetLanguage);
+      source = 'assistant';
     }
-    const data = await res.json();
-    const translation = data?.translation || data?.reply || '';
+
     const targetLabel = getLanguageLabel(targetLanguage);
     if (!translation) {
       state.translationCache.set(cacheKey, null);
@@ -3844,7 +3899,7 @@ async function fetchGroqTranslation(word, sourceLanguage, targetLanguage = state
       ],
       derivatives: [],
       targetLanguage,
-      source: 'groq',
+      source,
     };
     state.translationCache.set(cacheKey, detail);
     return detail;

@@ -667,8 +667,8 @@ function handleYoudaoProxy(req, res) {
 }
 
 function handleTranslateProxy(req, res) {
-  if (!GROQ_API_KEY) {
-    return sendJSON(res, 500, { error: 'Missing GROQ_API_KEY in .env' });
+  if (!GROQ_API_KEY && !DEEPSEEK_API_KEY) {
+    return sendJSON(res, 500, { error: 'Missing GROQ_API_KEY and DEEPSEEK_API_KEY in .env' });
   }
 
   let raw = '';
@@ -684,95 +684,23 @@ function handleTranslateProxy(req, res) {
     }
 
     const text = String(payload.text || payload.q || '').trim();
-    const targetLanguage = String(payload.targetLanguage || 'zh').trim();
-    const sourceLanguage = String(payload.sourceLanguage || 'auto').trim();
+    const targetLanguage = String(payload.targetLanguage || 'zh').trim().toLowerCase();
+    const sourceLanguage = String(payload.sourceLanguage || 'auto').trim().toLowerCase();
 
     if (!text) {
       return sendJSON(res, 400, { error: 'Missing text' });
     }
 
-    const maxLength = 180;
-    const clippedText = text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
-
-    const langMap = { en: 'English', zh: '中文', ja: '日本語' };
-    const outputLang = langMap[targetLanguage] || 'English';
-    const isEnglish = targetLanguage === 'en';
-    
-    const isJapanese = targetLanguage === 'ja';
-    
-    let systemPrompt, userPrompt;
-    
-    if (isEnglish) {
-      systemPrompt = `You are a concise English vocabulary assistant. Reply ONLY in English with this exact format:
-Definition: English explanation of the meaning (1-2 definitions)
-Context: A short example sentence in English
-
-Requirements:
-- Everything must be written in English
-- Keep total under 60 words
-- Direct answers only`;
-      userPrompt = `Explain this word in English: ${clippedText}`;
-    } else if (isJapanese) {
-      systemPrompt = `あなたは日本語の語彙アシスタントです。必ず日本語のみで回答してください：
-【意味】日本語での意味説明（1-2つの定義）
-【場面】日本語での短い例文
-
-要件：
-- すべて日本語で書くこと
-- 80文字以内
-- 説明なしで直接回答`;
-      userPrompt = `この言葉を日本語で説明してください：${clippedText}`;
-    } else {
-      systemPrompt = `你是一个简洁的词汇翻译助手。请用中文回答，格式如下：
-【释义】词汇的核心意思（1-2个最常用的释义）
-【场景】常用场景或语境（简短说明在什么情况下使用）
-
-要求：
-- 总字数控制在80字以内
-- 直接给出答案，不要多余解释
-- 如果是短语，解释整体含义`;
-      userPrompt = `请用中文翻译这个词汇：${clippedText}`;
-    }
-    
-    const messages = [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ];
-
-    const upstreamUrl = `${GROQ_BASE_URL}/chat/completions`;
-
     try {
-      const upstreamRes = await fetch(upstreamUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: GROQ_MODEL,
-          messages,
-          temperature: 0.3,
-          max_tokens: 200,
-        }),
-      });
-
-      const textBody = await upstreamRes.text();
-      let json;
-      try {
-        json = JSON.parse(textBody);
-      } catch (error) {
-        json = { raw: textBody };
+      const normalizedTarget = ['zh', 'en', 'ja'].includes(targetLanguage) ? targetLanguage : 'zh';
+      const translation = await requestModelTranslationText(text, normalizedTarget, sourceLanguage);
+      if (!translation) {
+        return sendJSON(res, 502, { error: 'Translation upstream unavailable' });
       }
-
-      if (!upstreamRes.ok) {
-        return sendJSON(res, upstreamRes.status, { error: 'Upstream error', detail: json });
-      }
-
-      const translation = json?.choices?.[0]?.message?.content?.trim?.() || '';
-      return sendJSON(res, 200, { translation, upstream: json });
+      return sendJSON(res, 200, { translation });
     } catch (error) {
-      console.error('[Server] Groq translate failed:', error);
-      return sendJSON(res, 502, { error: 'Request to Groq failed' });
+      console.error('[Server] Translate proxy failed:', error);
+      return sendJSON(res, 502, { error: 'Request to translation provider failed' });
     }
   });
 }
