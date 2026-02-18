@@ -424,9 +424,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-height: 420px;
-  overflow: auto;
   padding-right: 4px;
+}
+
+.sidebar .word-list {
+  max-height: none;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .word-list.empty-state {
@@ -624,6 +628,7 @@ body {
   max-height: none;
   flex: 1;
   padding: 10% 12px 10px;
+  overflow: auto;
 }
 
 .saved-conversation-list {
@@ -631,6 +636,7 @@ body {
   flex: 1;
   padding: 8px 12px;
   justify-content: flex-start;
+  overflow: auto;
 }
 
 .saved-log-date-section {
