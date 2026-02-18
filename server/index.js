@@ -209,13 +209,13 @@ server.on('listening', () => {
   console.log(`[Server] running at http://localhost:${actualPort}`);
   console.log(`[Server] SQL store: ${sqlStore.dbPath}`);
   if (!DEEPSEEK_API_KEY) {
-    console.warn('[Server] DEEPSEEK_API_KEY is missing. Set it in .env to enable /api/assistant.');
+    console.warn('[Server] DEEPSEEK_API_KEY is missing. Set it in .env to enable /api/assistant and primary /api/translate.');
   }
   if (!GROQ_API_KEY) {
-    console.warn('[Server] GROQ_API_KEY is missing. Set it in .env to enable /api/translate.');
+    console.warn('[Server] GROQ_API_KEY is missing. Groq fallback for /api/translate and /api/selection is disabled.');
   }
   if (!GROQ_API_KEY && !DEEPSEEK_API_KEY) {
-    console.warn('[Server] GROQ_API_KEY and DEEPSEEK_API_KEY are both missing. /api/selection will only return local analysis.');
+    console.warn('[Server] GROQ_API_KEY and DEEPSEEK_API_KEY are both missing. /api/translate is unavailable and /api/selection will only return local analysis.');
   }
 });
 
@@ -1038,11 +1038,11 @@ function inferEnglishBaseForm(word) {
 }
 
 async function requestSelectionByLLM(q, context = '', language = 'ja', local = null) {
-  const groqResult = await requestGroqSelection(q, context, language, local);
-  if (groqResult) {
-    return groqResult;
+  const deepSeekResult = await requestDeepSeekSelection(q, context, language, local);
+  if (deepSeekResult) {
+    return deepSeekResult;
   }
-  return requestDeepSeekSelection(q, context, language, local);
+  return requestGroqSelection(q, context, language, local);
 }
 
 async function requestGroqSelection(q, context = '', language = 'ja', local = null) {
@@ -1243,11 +1243,11 @@ async function requestModelTranslationText(text, targetLanguage = 'zh', sourceLa
   if (normalizedSource && normalizedSource === normalizedTarget) {
     return q;
   }
-  const groqText = await requestGroqTranslationText(text, targetLanguage, sourceLanguage);
-  if (groqText) {
-    return groqText;
+  const deepSeekText = await requestDeepSeekTranslationText(text, targetLanguage, sourceLanguage);
+  if (deepSeekText) {
+    return deepSeekText;
   }
-  return requestDeepSeekTranslationText(text, targetLanguage, sourceLanguage);
+  return requestGroqTranslationText(text, targetLanguage, sourceLanguage);
 }
 
 async function requestGroqTranslationText(text, targetLanguage = 'zh', sourceLanguage = 'ja') {

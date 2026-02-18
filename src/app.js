@@ -1,4 +1,3 @@
-import { lookupWord, preloadDictionary } from './dictionaryService.js';
 import {
   loadSession,
   saveSession,
@@ -51,7 +50,7 @@ const REFLECTION_SAVE_DEBOUNCE_MS = 500;
 const WELCOME_FADE_OUT_MS = 180;
 const WELCOME_SEEN_STORAGE_ID = 'reader-welcome-seen-v1';
 const ONBOARDING_SEEN_STORAGE_ID = 'reader-onboarding-seen-v1';
-const ASSISTANT_SYSTEM_PROMPT = 'You are a concise multilingual reading assistant. By default, reply in the same language as the user\'s latest message. If the user explicitly asks for a different response language, follow that instruction. Keep the main direction of your answers aligned with the provided reading context and the current user message. If the user asks what a concept in the article means, explain it clearly and accurately based on the reading content. If the user asks a conceptual question unrelated to the reading content, still answer it accurately and concisely. Output plain text only: do not use markdown, do not use any asterisks (*), and do not output garbled text or mojibake symbols. Use clean natural UTF-8 characters only. When the user indicates they finished reading, start a Feynman-style loop: ask for a key-point summary, request an example or analogy, point out gaps or misunderstandings, then provide 1-2 self-test questions and a brief recap.';
+const ASSISTANT_SYSTEM_PROMPT = 'You are a friendly multilingual reading buddy. Discuss the reading content with the user like a friend, not like a lecturer. Keep every single reply short to avoid reading fatigue (prefer 2-4 concise sentences, unless the user explicitly asks for more). Prioritize back-and-forth conversation and often include a natural follow-up question to invite the user to respond. By default, reply in the same language as the user\'s latest message. If the user explicitly asks for a different response language, follow that instruction. Keep the main direction of your answers aligned with the provided reading context and the current user message. If the user asks what a concept in the article means, explain it clearly and accurately based on the reading content. If the user asks a conceptual question unrelated to the reading content, still answer it accurately and concisely. Output plain text only: do not use markdown, do not use any asterisks (*), and do not output garbled text or mojibake symbols. Use clean natural UTF-8 characters only. When the user indicates they finished reading, start a Feynman-style loop: ask for a key-point summary, request an example or analogy, point out gaps or misunderstandings, then provide 1-2 self-test questions and a brief recap.';
 const LANGUAGE_LABELS = {
   en: '英语',
   zh: '中文',
@@ -562,7 +561,6 @@ function cacheDom() {
   elements.tooltipContent = elements.tooltip?.querySelector('.tooltip-content');
   elements.tooltipWord = document.getElementById('tooltipWord');
   elements.tooltipBody = document.getElementById('tooltipBody');
-  elements.playUkBtn = document.getElementById('playUkBtn');
   elements.playUsBtn = document.getElementById('playUsBtn');
   elements.closeTooltipBtn = document.getElementById('closeTooltipBtn');
   elements.aiToggleBtn = document.getElementById('aiToggleBtn');
@@ -842,8 +840,9 @@ function completeWelcomeSequence() {
   if (state.welcome.completed) {
     return;
   }
+  setWelcomeSeen(true);
   if (elements.welcomeSkipCheckbox) {
-    setWelcomeSeen(Boolean(elements.welcomeSkipCheckbox.checked));
+    elements.welcomeSkipCheckbox.checked = true;
   }
   state.welcome.completed = true;
   renderWelcomeLine();
@@ -1601,9 +1600,6 @@ async function initializeAppCore() {
     setAssistantStatus(DEFAULT_ASSISTANT_STATUS);
   }
   applyDrawerSize(elements.drawerSizeControl?.value ?? DRAWER_SIZE_DEFAULT);
-  void preloadDictionary().catch((error) => {
-    console.warn('[Init] preload dictionary failed:', error);
-  });
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js';
   }
@@ -2140,21 +2136,12 @@ function bindAssistantEvents() {
     });
   }
 
-  if (elements.playUkBtn) {
-    elements.playUkBtn.addEventListener('click', () => {
-      state.pronunciationAccent = 'uk';
-      if (tooltipState.detail) {
-        playPronunciation(tooltipState.detail, 'uk');
-      }
-    });
-  }
   if (elements.playUsBtn) {
     elements.playUsBtn.addEventListener('click', () => {
       if (tooltipState.detail) {
         const wordText = tooltipState.detail.requested || tooltipState.detail.word || '';
         const wordLanguage = normalizeWordLanguage(tooltipState.detail.language, wordText);
         if (wordLanguage === 'en') {
-          state.pronunciationAccent = 'us';
           playPronunciation(tooltipState.detail, 'us');
         } else {
           playPronunciation(tooltipState.detail);
@@ -3667,8 +3654,8 @@ async function handleWordClick(node, rawWord, tokenIndex = -1, { anchorRect = nu
 
   const normalizedWord = normalizeWordKey(resolvedWord);
   const targetLanguage = resolveTargetLanguage(state.language, wordLanguage);
-  const useDictionary = shouldUseDictionary(wordLanguage);
-  const detail = useDictionary ? await lookupWord(resolvedWord) : null;
+  const useDictionary = false;
+  const detail = null;
   const previous = state.clickedWords.get(normalizedWord);
   const record = detail
     ? {
@@ -3765,10 +3752,7 @@ async function handleWordClick(node, rawWord, tokenIndex = -1, { anchorRect = nu
 }
 
 function shouldUseDictionary(language) {
-  if (state.language !== 'zh') {
-    return false;
-  }
-  return language === 'en';
+  return false;
 }
 
 function resolveTargetLanguage(readingLanguage, sourceLanguage = '') {
@@ -4271,16 +4255,6 @@ function extractMeaningText(detail) {
   return String(first?.zh || '').trim();
 }
 
-function extractMeaningTextByLanguage(detail, language = 'zh') {
-  const label = getLanguageLabel(language);
-  const meanings = Array.isArray(detail?.meanings) ? detail.meanings : [];
-  const preferred = meanings.find((item) => item?.pos === label && String(item?.zh || '').trim());
-  if (preferred) {
-    return String(preferred.zh || '').trim();
-  }
-  return extractMeaningText(detail);
-}
-
 function buildSelectionMeanings(zhText = '', enText = '', jaText = '') {
   const meanings = [];
   const zh = String(zhText || '').trim();
@@ -4487,13 +4461,6 @@ async function handleArticleSelectionLookup() {
       }
     }
   } else if (sourceLanguage === 'en') {
-    const dictionaryDetail = await lookupWord(resolvedWord);
-    if (!phonetics) {
-      phonetics = String(dictionaryDetail?.phonetics || '').trim();
-    }
-    if (!zhText) {
-      zhText = extractMeaningTextByLanguage(dictionaryDetail, 'zh');
-    }
     if (!zhText || !enText || !jaText) {
       const [zhDetail, enDetail, jaDetail] = await Promise.all([
         zhText ? Promise.resolve(null) : fetchGroqTranslation(resolvedWord, 'en', 'zh'),
@@ -5603,31 +5570,20 @@ function showTooltip(anchor, detail, { anchorRect = null } = {}) {
   elements.tooltipContent.style.top = '0px';
   elements.tooltipContent.style.left = '0px';
 
-  // 多语言朗读：英文显示英/美；中文/日语显示通用“读”按钮
+  // 多语言朗读：仅显示一个喇叭按钮
   const wordText = detail.requested || detail.word || anchor?.dataset?.word || '';
   const wordLanguage = normalizeWordLanguage(detail.language, wordText);
   const showEnglishPronunciation = wordLanguage === 'en';
   const showGeneralPronunciation = ['zh', 'ja'].includes(wordLanguage);
-  if (elements.playUkBtn) {
-    if (showEnglishPronunciation) {
-      elements.playUkBtn.style.display = '';
-      elements.playUkBtn.textContent = '英';
-      elements.playUkBtn.title = '英式发音';
-      elements.playUkBtn.setAttribute('aria-label', '英式发音');
-    } else {
-      elements.playUkBtn.style.display = 'none';
-    }
-  }
   if (elements.playUsBtn) {
     if (showEnglishPronunciation || showGeneralPronunciation) {
       elements.playUsBtn.style.display = '';
+      elements.playUsBtn.textContent = '🔈';
       if (showEnglishPronunciation) {
-        elements.playUsBtn.textContent = '美';
-        elements.playUsBtn.title = '美式发音';
-        elements.playUsBtn.setAttribute('aria-label', '美式发音');
+        elements.playUsBtn.title = '发音';
+        elements.playUsBtn.setAttribute('aria-label', '发音');
       } else {
         const label = getLanguageLabel(wordLanguage);
-        elements.playUsBtn.textContent = '读';
         elements.playUsBtn.title = `${label}发音`;
         elements.playUsBtn.setAttribute('aria-label', `${label}发音`);
       }
