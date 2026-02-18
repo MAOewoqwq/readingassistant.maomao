@@ -459,6 +459,7 @@ const state = {
     steps: [],
   },
   translationCache: new Map(),
+  pronunciationCache: new Map(),
   japaneseReadingCache: new Map(),
   japanesePhraseCache: new Map(),
   selectionCache: new Map(),
@@ -674,6 +675,7 @@ function setLanguage(language, { skipRender = false, skipSave = false } = {}) {
   const normalized = ['en', 'zh', 'ja'].includes(language) ? language : 'en';
   state.language = normalized;
   state.translationCache = new Map();
+  state.pronunciationCache = new Map();
   state.japaneseReadingCache = new Map();
   state.japanesePhraseCache = new Map();
   state.selectionCache = new Map();
@@ -1599,7 +1601,9 @@ async function initializeAppCore() {
     setAssistantStatus(DEFAULT_ASSISTANT_STATUS);
   }
   applyDrawerSize(elements.drawerSizeControl?.value ?? DRAWER_SIZE_DEFAULT);
-  await preloadDictionary();
+  void preloadDictionary().catch((error) => {
+    console.warn('[Init] preload dictionary failed:', error);
+  });
   if (window.pdfjsLib) {
     window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.worker.min.js';
   }
@@ -1618,11 +1622,13 @@ async function init() {
   const appReadyPromise = initializeAppCore().catch((error) => {
     console.error('[Init] failed:', error);
   });
-  await Promise.all([welcomePromise, appReadyPromise]);
+  await welcomePromise;
   if (shouldShowWelcome) {
     await hideWelcomeOverlay();
   }
-  window.setTimeout(() => startOnboardingIfNeeded(), 120);
+  void appReadyPromise.finally(() => {
+    window.setTimeout(() => startOnboardingIfNeeded(), 120);
+  });
 }
 
 function bindEvents() {
@@ -2201,6 +2207,7 @@ function handleClearAllCache() {
   state.assistant.report = '';
   state.assistant.messages = [];
   state.assistant.hintsConsumed = false;
+  state.pronunciationCache = new Map();
   if (elements.textInput) {
     elements.textInput.value = '';
   }
@@ -2948,6 +2955,7 @@ function loadArticle(text) {
   state.activeConversationArchive = null;
   closeConversationArchiveDetail();
   state.translationCache = new Map();
+  state.pronunciationCache = new Map();
   state.japaneseReadingCache = new Map();
   state.japanesePhraseCache = new Map();
   state.selectionCache = new Map();
@@ -3885,7 +3893,7 @@ async function fetchGroqTranslation(word, sourceLanguage, targetLanguage = state
 
     const targetLabel = getLanguageLabel(targetLanguage);
     if (!translation) {
-      state.translationCache.set(cacheKey, null);
+      state.translationCache.delete(cacheKey);
       return null;
     }
     const detail = {
@@ -3905,7 +3913,7 @@ async function fetchGroqTranslation(word, sourceLanguage, targetLanguage = state
     return detail;
   } catch (error) {
     console.warn('[Translate] request failed:', error);
-    state.translationCache.set(cacheKey, null);
+    state.translationCache.delete(cacheKey);
     return null;
   }
 }
@@ -3920,12 +3928,66 @@ function mapToYoudaoLanguageCode(language) {
   return 'zh-CHS';
 }
 
+function mapToYoudaoSourceLanguageCode(language) {
+  if (language === 'en') {
+    return 'en';
+  }
+  if (language === 'ja') {
+    return 'ja';
+  }
+  if (language === 'zh') {
+    return 'zh-CHS';
+  }
+  return 'auto';
+}
+
 function buildYoudaoJapaneseSpeakUrl(word) {
   const q = String(word || '').trim();
   if (!q) {
     return '';
   }
   return `https://dict.youdao.com/dictvoice?le=jap&type=3&audio=${encodeURIComponent(q)}`;
+}
+
+async function fetchYoudaoPronunciationUrl(word, language = 'en', accent = 'us') {
+  const q = String(word || '').trim();
+  if (!q) {
+    return '';
+  }
+  const normalizedLanguage = normalizeWordLanguage(language, q);
+  const cacheKey = `${normalizeWordKey(q)}__${normalizedLanguage}__${accent || 'default'}`;
+  if (state.pronunciationCache.has(cacheKey)) {
+    return state.pronunciationCache.get(cacheKey) || '';
+  }
+
+  try {
+    const res = await fetch(YOUDAO_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        q,
+        from: mapToYoudaoSourceLanguageCode(normalizedLanguage),
+        to: normalizedLanguage === 'zh' ? 'en' : 'zh-CHS',
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const url = String(data?.speakUrl || data?.tSpeakUrl || '').trim();
+    if (url) {
+      state.pronunciationCache.set(cacheKey, url);
+      return url;
+    }
+  } catch (error) {
+    console.warn('[Audio] Youdao pronunciation request failed:', error);
+  }
+
+  const fallback = normalizedLanguage === 'ja'
+    ? buildYoudaoJapaneseSpeakUrl(q)
+    : buildDictVoiceUrl(q, accent);
+  state.pronunciationCache.set(cacheKey, fallback || '');
+  return fallback;
 }
 
 async function fetchYoudaoTranslation(word, targetLanguage = 'zh', baseForm = '') {
@@ -3994,7 +4056,7 @@ async function fetchYoudaoTranslation(word, targetLanguage = 'zh', baseForm = ''
     }
 
     if (!meanings.length) {
-      state.translationCache.set(cacheKey, null);
+      state.translationCache.delete(cacheKey);
       return null;
     }
 
@@ -4015,7 +4077,7 @@ async function fetchYoudaoTranslation(word, targetLanguage = 'zh', baseForm = ''
     return detail;
   } catch (error) {
     console.warn('[Youdao] request failed:', error);
-    state.translationCache.set(cacheKey, null);
+    state.translationCache.delete(cacheKey);
     return null;
   }
 }
@@ -4170,13 +4232,13 @@ function getArticleSelectionPayload() {
     articleLanguage: state.articleLanguage,
     readingLanguage: state.language,
   });
-  if (!['ja', 'en'].includes(language)) {
+  if (!['ja', 'en', 'zh'].includes(language)) {
     return null;
   }
   if (language === 'en' && !/[A-Za-z]/.test(selectedText)) {
     return null;
   }
-  if (language === 'ja' && !/[\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(selectedText)) {
+  if ((language === 'ja' || language === 'zh') && !/[\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(selectedText)) {
     return null;
   }
 
@@ -4320,7 +4382,7 @@ async function fetchSelectionAnalysis(q, language = 'ja', context = '') {
   if (!text) {
     return null;
   }
-  const normalizedLanguage = ['ja', 'en'].includes(language) ? language : detectWordLanguage(text);
+  const normalizedLanguage = ['ja', 'en', 'zh'].includes(language) ? language : detectWordLanguage(text);
   const normalizedContext = String(context || '').trim();
   const cacheKey = `${normalizedLanguage}__${text}__${normalizedContext}`;
   if (state.selectionCache.has(cacheKey)) {
@@ -4356,7 +4418,7 @@ async function fetchSelectionAnalysis(q, language = 'ja', context = '') {
     return result;
   } catch (error) {
     console.warn('[Selection] request failed:', error);
-    state.selectionCache.set(cacheKey, null);
+    state.selectionCache.delete(cacheKey);
     return null;
   }
 }
@@ -4437,6 +4499,26 @@ async function handleArticleSelectionLookup() {
         zhText ? Promise.resolve(null) : fetchGroqTranslation(resolvedWord, 'en', 'zh'),
         enText ? Promise.resolve(null) : fetchGroqTranslation(resolvedWord, 'en', 'en'),
         jaText ? Promise.resolve(null) : fetchGroqTranslation(resolvedWord, 'en', 'ja'),
+      ]);
+      if (!zhText) {
+        zhText = extractMeaningText(zhDetail);
+      }
+      if (!enText) {
+        enText = extractMeaningText(enDetail);
+      }
+      if (!jaText) {
+        jaText = extractMeaningText(jaDetail);
+      }
+    }
+  } else if (sourceLanguage === 'zh') {
+    if (!zhText) {
+      zhText = resolvedWord;
+    }
+    if (!zhText || !enText || !jaText) {
+      const [zhDetail, enDetail, jaDetail] = await Promise.all([
+        zhText ? Promise.resolve(null) : fetchGroqTranslation(resolvedWord, 'zh', 'zh'),
+        enText ? Promise.resolve(null) : fetchGroqTranslation(resolvedWord, 'zh', 'en'),
+        jaText ? Promise.resolve(null) : fetchGroqTranslation(resolvedWord, 'zh', 'ja'),
       ]);
       if (!zhText) {
         zhText = extractMeaningText(zhDetail);
@@ -5906,11 +5988,53 @@ function playPronunciation(detail, accentOverride = '') {
   const isEnglishSentence = isEnglish && /\s|[,.!?;:]/.test(String(targetWord || '').trim());
   const shouldSegmentJapanese = wordLanguage === 'ja' && splitJapaneseSpeechSegments(playbackWord, JA_TTS_SEGMENT_MAX_CHARS).length > 1;
   const allowSpeechFallback = true;
-  const url = isEnglish
+  const directUrl = isEnglish
     ? (isEnglishSentence ? '' : buildDictVoiceUrl(targetWord, accent))
     : (wordLanguage === 'ja'
       ? buildYoudaoJapaneseSpeakUrl(playbackWord)
       : (detail.speakUrl || detail.tSpeakUrl || ''));
+
+  const playWithUrlOrSpeechFallback = (audioUrl = '') => {
+    const finalUrl = String(audioUrl || '').trim();
+    if (!finalUrl) {
+      if (!allowSpeechFallback) {
+        console.warn('[Audio] no playable url for', targetWord);
+        return;
+      }
+      playBySpeechSynthesis().then((ok) => {
+        if (!ok) {
+          console.warn('[Audio] no playable url for', targetWord);
+        }
+      });
+      return;
+    }
+
+    playAudioSourceWithFetchFallback(finalUrl, { waitForEnd: false, requestId }).then((ok) => {
+      if (ok) {
+        return;
+      }
+      if (allowSpeechFallback) {
+        playBySpeechSynthesis().then((speechOk) => {
+          if (!speechOk) {
+            console.warn('[Audio] no playable speech voice for', targetWord);
+          }
+        });
+      } else {
+        console.warn('[Audio] no playable url for', targetWord);
+      }
+    }).catch((error) => {
+      console.warn('[Audio] play failed:', error);
+      if (allowSpeechFallback) {
+        playBySpeechSynthesis().then((speechOk) => {
+          if (!speechOk) {
+            console.warn('[Audio] no playable speech voice for', targetWord);
+          }
+        });
+      } else {
+        console.warn('[Audio] no playable url for', targetWord);
+      }
+    });
+  };
 
   const playBySpeechSynthesis = async () => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -5949,10 +6073,13 @@ function playPronunciation(detail, accentOverride = '') {
   };
 
   if (isEnglishSentence) {
-    playBySpeechSynthesis().then((ok) => {
-      if (!ok) {
-        console.warn('[Audio] no playable speech voice for', targetWord);
+    fetchYoudaoPronunciationUrl(targetWord, wordLanguage, accent).then((youdaoUrl) => {
+      if (!isLatestPronunciationRequest(requestId)) {
+        return;
       }
+      playWithUrlOrSpeechFallback(youdaoUrl || directUrl);
+    }).catch(() => {
+      playWithUrlOrSpeechFallback(directUrl);
     });
     return;
   }
@@ -5974,44 +6101,19 @@ function playPronunciation(detail, accentOverride = '') {
     return;
   }
 
-  if (!url) {
-    if (!allowSpeechFallback) {
-      console.warn('[Audio] no playable url for', targetWord);
-      return;
-    }
-    playBySpeechSynthesis().then((ok) => {
-      if (!ok) {
-        console.warn('[Audio] no playable url for', targetWord);
+  if (wordLanguage === 'en' || wordLanguage === 'zh') {
+    fetchYoudaoPronunciationUrl(targetWord, wordLanguage, accent).then((youdaoUrl) => {
+      if (!isLatestPronunciationRequest(requestId)) {
+        return;
       }
+      playWithUrlOrSpeechFallback(youdaoUrl || directUrl);
+    }).catch(() => {
+      playWithUrlOrSpeechFallback(directUrl);
     });
     return;
   }
 
-  playAudioSourceWithFetchFallback(url, { waitForEnd: false, requestId }).then((ok) => {
-    if (ok) {
-      return;
-    }
-    if (allowSpeechFallback) {
-      playBySpeechSynthesis().then((speechOk) => {
-        if (!speechOk) {
-          console.warn('[Audio] no playable speech voice for', targetWord);
-        }
-      });
-    } else {
-      console.warn('[Audio] no playable url for', targetWord);
-    }
-  }).catch((error) => {
-    console.warn('[Audio] play failed:', error);
-    if (allowSpeechFallback) {
-      playBySpeechSynthesis().then((speechOk) => {
-        if (!speechOk) {
-          console.warn('[Audio] no playable speech voice for', targetWord);
-        }
-      });
-    } else {
-      console.warn('[Audio] no playable url for', targetWord);
-    }
-  });
+  playWithUrlOrSpeechFallback(directUrl);
 }
 
 function buildDictVoiceUrl(word, accent = 'us') {

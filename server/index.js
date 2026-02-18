@@ -814,22 +814,22 @@ function handleSelectionProxy(req, res, { forcedLanguage = '' } = {}) {
     const q = normalizeSelectionText(payload.q || payload.text || '');
     const context = String(payload.context || '').replace(/\s+/g, ' ').trim().slice(0, 500);
     const requestedLanguage = String(payload.language || forcedLanguage || '').trim().toLowerCase();
-    const language = ['ja', 'en'].includes(requestedLanguage)
+    const language = ['ja', 'en', 'zh'].includes(requestedLanguage)
       ? requestedLanguage
       : detectSelectionLanguage(q);
 
     if (!q) {
       return sendJSON(res, 400, { error: 'Missing q' });
     }
-    if (!['ja', 'en'].includes(language)) {
-      return sendJSON(res, 400, { error: 'Unsupported language, expected ja or en' });
+    if (!['ja', 'en', 'zh'].includes(language)) {
+      return sendJSON(res, 400, { error: 'Unsupported language, expected ja, en or zh' });
     }
 
     try {
-      const tokenizer = await getJapaneseTokenizer();
+      const tokenizer = language === 'ja' ? await getJapaneseTokenizer() : null;
       const local = language === 'ja'
         ? analyzeJapaneseSelectionLocally(q, tokenizer)
-        : analyzeEnglishSelectionLocally(q);
+        : (language === 'en' ? analyzeEnglishSelectionLocally(q) : analyzeChineseSelectionLocally(q));
       const mode = isSingleWordSelection(q, language) ? 'word' : 'phrase';
       let result = {
         query: q,
@@ -849,7 +849,7 @@ function handleSelectionProxy(req, res, { forcedLanguage = '' } = {}) {
         source: 'local',
       };
 
-      if (mode !== 'word') {
+      if (mode !== 'word' && language !== 'zh') {
         const llmSelection = await requestSelectionByLLM(q, context, language, local);
         if (llmSelection) {
           result = mergeSelectionResult(result, llmSelection);
@@ -891,7 +891,7 @@ function detectSelectionLanguage(text) {
     return 'en';
   }
   if (/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(q)) {
-    return 'ja';
+    return 'zh';
   }
   return '';
 }
@@ -909,6 +909,18 @@ function isSingleWordSelection(text, language = 'ja') {
       return false;
     }
     return !/[。．.!！?？,，、;；:\-–—]/.test(q);
+  }
+  if (language === 'zh') {
+    if (/\s/.test(q)) {
+      return false;
+    }
+    if (!/[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(q)) {
+      return false;
+    }
+    if (/[。．.!！?？,，、;；:\-–—]/.test(q)) {
+      return false;
+    }
+    return q.length <= 6;
   }
   return false;
 }
@@ -961,6 +973,29 @@ function analyzeEnglishSelectionLocally(q) {
   return {
     surface: normalized,
     baseForm,
+    hiragana: '',
+    katakana: '',
+    phonetics: '',
+    confidence,
+  };
+}
+
+function analyzeChineseSelectionLocally(q) {
+  const surface = normalizeSelectionText(q);
+  const compact = surface.replace(/\s+/g, '');
+  const isSingleWord = isSingleWordSelection(compact, 'zh');
+  let confidence = 0.72;
+  if (isSingleWord) {
+    confidence = 0.9;
+  } else if (compact.length <= 20) {
+    confidence = 0.82;
+  } else if (compact.length <= 120) {
+    confidence = 0.74;
+  }
+
+  return {
+    surface,
+    baseForm: compact || surface,
     hiragana: '',
     katakana: '',
     phonetics: '',
@@ -1199,6 +1234,15 @@ function mergeSelectionResult(base, extra) {
 }
 
 async function requestModelTranslationText(text, targetLanguage = 'zh', sourceLanguage = 'ja') {
+  const q = String(text || '').trim();
+  if (!q) {
+    return '';
+  }
+  const normalizedTarget = String(targetLanguage || 'zh').trim().toLowerCase();
+  const normalizedSource = String(sourceLanguage || '').trim().toLowerCase();
+  if (normalizedSource && normalizedSource === normalizedTarget) {
+    return q;
+  }
   const groqText = await requestGroqTranslationText(text, targetLanguage, sourceLanguage);
   if (groqText) {
     return groqText;

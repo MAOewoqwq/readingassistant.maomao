@@ -4,24 +4,46 @@ const DICT_PATHS = [
 ];
 
 let dictionaryIndex = null;
+let dictionaryLoadPromise = null;
+let dictionaryLoadFailedAt = 0;
 const WORD_PATTERN = /^[\p{L}][\p{L}'-]*[\p{L}]$/u;
+const DICTIONARY_RETRY_COOLDOWN_MS = 8000;
 
 export async function preloadDictionary() {
-  if (dictionaryIndex) {
-    return;
+  if (dictionaryIndex && dictionaryIndex.size > 0) {
+    return true;
   }
-  await loadDictionarySequentially(DICT_PATHS);
-  if (!dictionaryIndex) {
-    console.error('[Dictionary] 未能加载任何词典数据，请确认 data 目录下的词典文件存在。');
-    dictionaryIndex = new Map();
+  if (dictionaryLoadPromise) {
+    return dictionaryLoadPromise;
   }
+
+  const now = Date.now();
+  if (dictionaryLoadFailedAt && now - dictionaryLoadFailedAt < DICTIONARY_RETRY_COOLDOWN_MS) {
+    return false;
+  }
+
+  dictionaryLoadPromise = (async () => {
+    const loaded = await loadDictionarySequentially(DICT_PATHS);
+    if (!loaded || !dictionaryIndex || dictionaryIndex.size === 0) {
+      dictionaryLoadFailedAt = Date.now();
+      dictionaryIndex = null;
+      console.error('[Dictionary] 未能加载任何词典数据，请确认 data 目录下的词典文件存在。');
+      return false;
+    }
+    dictionaryLoadFailedAt = 0;
+    return true;
+  })().finally(() => {
+    dictionaryLoadPromise = null;
+  });
+
+  return dictionaryLoadPromise;
 }
 
 export async function lookupWord(word) {
-  if (!dictionaryIndex) {
+  if (!dictionaryIndex || dictionaryIndex.size === 0) {
     await preloadDictionary();
   }
-  if (!dictionaryIndex) {
+  if (!dictionaryIndex || dictionaryIndex.size === 0) {
     return null;
   }
   const normalized = word.toLowerCase();
@@ -151,9 +173,10 @@ async function loadDictionarySequentially(paths) {
       });
       dictionaryIndex = map;
       console.info(`[Dictionary] Loaded ${map.size} entries from ${resource}`);
-      return;
+      return true;
     } catch (error) {
       console.warn(`[Dictionary] 加载 ${resource} 失败:`, error);
     }
   }
+  return false;
 }
