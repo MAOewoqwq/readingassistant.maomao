@@ -49,8 +49,9 @@ const JA_TTS_SEGMENT_MAX_CHARS = 30;
 const CLOUD_SYNC_DEBOUNCE_MS = 800;
 const REFLECTION_SAVE_DEBOUNCE_MS = 500;
 const WELCOME_FADE_OUT_MS = 180;
+const WELCOME_SEEN_STORAGE_ID = 'reader-welcome-seen-v1';
 const ONBOARDING_SEEN_STORAGE_ID = 'reader-onboarding-seen-v1';
-const ASSISTANT_SYSTEM_PROMPT = 'You are a concise multilingual reading assistant. By default, reply in the same language as the user\'s latest message. If the user explicitly asks for a different response language, follow that instruction. Answer directly based only on the provided reading context and current user message. Output plain text only: do not use markdown, do not use any asterisks (*), and do not output garbled text or mojibake symbols. Use clean natural UTF-8 characters only. When the user indicates they finished reading, start a Feynman-style loop: ask for a key-point summary, request an example or analogy, point out gaps or misunderstandings, then provide 1-2 self-test questions and a brief recap.';
+const ASSISTANT_SYSTEM_PROMPT = 'You are a concise multilingual reading assistant. By default, reply in the same language as the user\'s latest message. If the user explicitly asks for a different response language, follow that instruction. Keep the main direction of your answers aligned with the provided reading context and the current user message. If the user asks what a concept in the article means, explain it clearly and accurately based on the reading content. If the user asks a conceptual question unrelated to the reading content, still answer it accurately and concisely. Output plain text only: do not use markdown, do not use any asterisks (*), and do not output garbled text or mojibake symbols. Use clean natural UTF-8 characters only. When the user indicates they finished reading, start a Feynman-style loop: ask for a key-point summary, request an example or analogy, point out gaps or misunderstandings, then provide 1-2 self-test questions and a brief recap.';
 const LANGUAGE_LABELS = {
   en: '英语',
   zh: '中文',
@@ -97,6 +98,9 @@ const I18N_TRANSLATIONS = {
     archiveDetailMessages: '完整聊天记录',
     archiveDetailReflection: '回顾感想',
     archiveDetailReflectionPlaceholder: '看完聊天记录后，写下你的回顾、收获或下一步计划...',
+    archiveDetailReflectionConfirm: '确认并显示到右侧',
+    archiveDetailReflectionPreviewTitle: '已确认感想',
+    archiveDetailReflectionPreviewEmpty: '确认后会显示在这里。',
     archiveEmptyMessages: '暂无聊天内容。',
     archiveTurnsUnit: '轮',
     archiveRoleUser: '用户',
@@ -158,6 +162,7 @@ const I18N_TRANSLATIONS = {
     welcomeLine3: '让每一篇阅读都被温柔存档，最终沉淀成你脑海里的光。',
     welcomeTapHint: '点击继续',
     welcomeEnteringHint: '正在进入学习空间...',
+    welcomeDoNotShowAgain: '不再显示',
     onboardingStepCounter: '步骤 {current} / {total}',
     onboardingSkip: '跳过',
     onboardingNext: '下一步',
@@ -210,6 +215,9 @@ const I18N_TRANSLATIONS = {
     archiveDetailMessages: 'Full chat messages',
     archiveDetailReflection: 'Reflection',
     archiveDetailReflectionPlaceholder: 'After reviewing the chat, write your thoughts, takeaways, or next steps...',
+    archiveDetailReflectionConfirm: 'Confirm and show on right',
+    archiveDetailReflectionPreviewTitle: 'Confirmed reflection',
+    archiveDetailReflectionPreviewEmpty: 'Your confirmed reflection will appear here.',
     archiveEmptyMessages: 'No chat content.',
     archiveTurnsUnit: 'turns',
     archiveRoleUser: 'User',
@@ -271,6 +279,7 @@ const I18N_TRANSLATIONS = {
     welcomeLine3: 'Let every reading be gently archived into the light of your memory.',
     welcomeTapHint: 'Tap to continue',
     welcomeEnteringHint: 'Entering your learning space...',
+    welcomeDoNotShowAgain: 'Do not show again',
     onboardingStepCounter: 'Step {current} / {total}',
     onboardingSkip: 'Skip',
     onboardingNext: 'Next',
@@ -323,6 +332,9 @@ const I18N_TRANSLATIONS = {
     archiveDetailMessages: 'チャット全文',
     archiveDetailReflection: '振り返りメモ',
     archiveDetailReflectionPlaceholder: 'チャットを振り返って、気づき・学び・次の行動を書いてください...',
+    archiveDetailReflectionConfirm: '確定して右側に表示',
+    archiveDetailReflectionPreviewTitle: '確定した振り返り',
+    archiveDetailReflectionPreviewEmpty: '確定するとここに表示されます。',
     archiveEmptyMessages: 'チャット内容はありません。',
     archiveTurnsUnit: '往復',
     archiveRoleUser: 'ユーザー',
@@ -384,6 +396,7 @@ const I18N_TRANSLATIONS = {
     welcomeLine3: '読むたびの気づきをやさしく蓄え、記憶の中の光へ。',
     welcomeTapHint: 'タップして続行',
     welcomeEnteringHint: '学習スペースに入っています...',
+    welcomeDoNotShowAgain: '今後は表示しない',
     onboardingStepCounter: 'ステップ {current} / {total}',
     onboardingSkip: 'スキップ',
     onboardingNext: '次へ',
@@ -476,6 +489,7 @@ function cacheDom() {
   elements.welcomeOverlay = document.getElementById('welcomeOverlay');
   elements.welcomeLine = document.getElementById('welcomeLine');
   elements.welcomeHint = document.getElementById('welcomeHint');
+  elements.welcomeSkipCheckbox = document.getElementById('welcomeSkipCheckbox');
   elements.appShell = document.querySelector('.app-shell');
   elements.fileInput = document.getElementById('fileInput');
   elements.pdfInput = document.getElementById('pdfInput');
@@ -499,6 +513,8 @@ function cacheDom() {
   elements.conversationDetailMessagesPanel = document.getElementById('conversationDetailMessagesPanel');
   elements.conversationDetailMessages = document.getElementById('conversationDetailMessages');
   elements.conversationDetailReflection = document.getElementById('conversationDetailReflection');
+  elements.conversationDetailReflectionConfirmBtn = document.getElementById('conversationDetailReflectionConfirmBtn');
+  elements.conversationDetailReflectionPreview = document.getElementById('conversationDetailReflectionPreview');
   elements.exportBtn = document.getElementById('exportBtn');
   elements.savedLogToggleBtn = document.getElementById('savedLogToggleBtn');
   elements.savedLogWordsTab = document.getElementById('savedLogWordsTab');
@@ -801,6 +817,9 @@ function showWelcomeOverlay() {
   state.welcome.active = true;
   elements.welcomeOverlay.classList.remove('is-leaving');
   elements.welcomeOverlay.setAttribute('aria-hidden', 'false');
+  if (elements.welcomeSkipCheckbox) {
+    elements.welcomeSkipCheckbox.checked = hasSeenWelcome();
+  }
   document.body.classList.add('welcome-open');
   renderWelcomeLine();
 }
@@ -820,6 +839,9 @@ function waitForWelcomeSequence() {
 function completeWelcomeSequence() {
   if (state.welcome.completed) {
     return;
+  }
+  if (elements.welcomeSkipCheckbox) {
+    setWelcomeSeen(Boolean(elements.welcomeSkipCheckbox.checked));
   }
   state.welcome.completed = true;
   renderWelcomeLine();
@@ -861,6 +883,24 @@ function hasSeenOnboarding() {
   } catch {
     return false;
   }
+}
+
+function hasSeenWelcome() {
+  try {
+    return localStorage.getItem(WELCOME_SEEN_STORAGE_ID) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function setWelcomeSeen(seen) {
+  try {
+    if (seen) {
+      localStorage.setItem(WELCOME_SEEN_STORAGE_ID, '1');
+      return;
+    }
+    localStorage.removeItem(WELCOME_SEEN_STORAGE_ID);
+  } catch {}
 }
 
 function markOnboardingSeen() {
@@ -1572,13 +1612,21 @@ async function initializeAppCore() {
 
 async function init() {
   cacheDom();
-  showWelcomeOverlay();
-  const welcomePromise = waitForWelcomeSequence();
+  const shouldShowWelcome = !hasSeenWelcome();
+  if (shouldShowWelcome) {
+    showWelcomeOverlay();
+  } else if (elements.welcomeOverlay) {
+    elements.welcomeOverlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('welcome-open');
+  }
+  const welcomePromise = shouldShowWelcome ? waitForWelcomeSequence() : Promise.resolve();
   const appReadyPromise = initializeAppCore().catch((error) => {
     console.error('[Init] failed:', error);
   });
   await Promise.all([welcomePromise, appReadyPromise]);
-  await hideWelcomeOverlay();
+  if (shouldShowWelcome) {
+    await hideWelcomeOverlay();
+  }
   window.setTimeout(() => startOnboardingIfNeeded(), 120);
 }
 
@@ -1689,14 +1737,29 @@ function bindEvents() {
     });
   }
   if (elements.welcomeOverlay) {
-    elements.welcomeOverlay.addEventListener('click', () => {
+    elements.welcomeOverlay.addEventListener('click', (event) => {
+      if (event.target.closest('.welcome-skip-control')) {
+        return;
+      }
       void advanceWelcomeSequence();
+    });
+  }
+
+  if (elements.welcomeSkipCheckbox) {
+    elements.welcomeSkipCheckbox.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+    elements.welcomeSkipCheckbox.addEventListener('change', (event) => {
+      setWelcomeSeen(Boolean(event.target.checked));
     });
   }
 
   elements.closeTooltipBtn.addEventListener('click', () => hideTooltip());
   document.addEventListener('keydown', (event) => {
     if (state.welcome.active) {
+      if (event.target === elements.welcomeSkipCheckbox) {
+        return;
+      }
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         void advanceWelcomeSequence();
@@ -1930,6 +1993,12 @@ function bindEvents() {
   if (elements.conversationDetailReflection) {
     elements.conversationDetailReflection.addEventListener('input', (event) => {
       updateActiveConversationReflection(event.target.value || '');
+    });
+  }
+
+  if (elements.conversationDetailReflectionConfirmBtn) {
+    elements.conversationDetailReflectionConfirmBtn.addEventListener('click', () => {
+      confirmActiveConversationReflection();
     });
   }
 
@@ -5071,7 +5140,31 @@ function renderConversationArchiveDetail(entry) {
   if (elements.conversationDetailReflection) {
     elements.conversationDetailReflection.value = String(entry?.reflection || '');
   }
+  renderConversationReflectionPreview(String(entry?.reflection || ''));
   renderConversationArchiveMessages(entry?.messages || []);
+}
+
+function renderConversationReflectionPreview(value = '') {
+  if (!elements.conversationDetailReflectionPreview) {
+    return;
+  }
+  const reflection = String(value || '').trim();
+  if (!reflection) {
+    elements.conversationDetailReflectionPreview.textContent = t('archiveDetailReflectionPreviewEmpty');
+    elements.conversationDetailReflectionPreview.classList.add('is-empty');
+    return;
+  }
+  elements.conversationDetailReflectionPreview.textContent = String(value || '');
+  elements.conversationDetailReflectionPreview.classList.remove('is-empty');
+}
+
+function confirmActiveConversationReflection() {
+  if (!elements.conversationDetailReflection) {
+    return;
+  }
+  const reflection = elements.conversationDetailReflection.value || '';
+  updateActiveConversationReflection(reflection);
+  renderConversationReflectionPreview(reflection);
 }
 
 function updateActiveConversationReflection(value) {

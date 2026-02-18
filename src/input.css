@@ -1381,6 +1381,12 @@ body.saved-log-open {
   flex-direction: column;
 }
 
+.archive-detail-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
 .archive-detail-header {
   display: flex;
   align-items: center;
@@ -1401,7 +1407,17 @@ body.saved-log-open {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  flex: 0 0 min(720px, 100%);
   max-width: 720px;
+}
+
+.archive-detail-side {
+  flex: 1;
+  min-width: 280px;
+  padding: 24px 20px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  overflow: auto;
 }
 
 .archive-detail-headline {
@@ -1486,6 +1502,56 @@ body.saved-log-open {
 .archive-reflection-input:focus {
   outline: none;
   border-color: var(--text);
+}
+
+.archive-reflection-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.archive-reflection-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.archive-reflection-confirm-btn {
+  white-space: nowrap;
+}
+
+.archive-reflection-preview-section {
+  min-height: 200px;
+}
+
+.archive-reflection-preview {
+  margin: 0;
+  min-height: 180px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.archive-reflection-preview.is-empty {
+  color: var(--text-muted);
+}
+
+@media (max-width: 1024px) {
+  .archive-detail-layout {
+    flex-direction: column;
+  }
+
+  .archive-detail-body {
+    flex: 1 1 auto;
+    max-width: none;
+  }
+
+  .archive-detail-side {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .archive-reflection-preview {
+    min-height: 120px;
+  }
 }
 
 .conversation-detail-list {
@@ -1777,6 +1843,10 @@ body.onboarding-open {
   overflow: hidden;
 }
 
+html.welcome-skip-persisted .welcome-overlay {
+  display: none !important;
+}
+
 .welcome-overlay {
   position: fixed;
   inset: 0;
@@ -1827,6 +1897,22 @@ body.onboarding-open {
   font-size: 13px;
   color: var(--text-muted);
   letter-spacing: 0.3px;
+}
+
+.welcome-skip-control {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.welcome-skip-control input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--text);
 }
 
 .onboarding-overlay {

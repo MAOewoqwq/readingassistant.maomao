@@ -4,6 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>多语阅读助手</title>
+  <script>
+    try {
+      if (localStorage.getItem('reader-welcome-seen-v1') === '1') {
+        document.documentElement.classList.add('welcome-skip-persisted');
+      }
+    } catch {}
+  </script>
   <link rel="stylesheet" href="./src/styles.css" />
   <!-- System font stack (Notion-style), no external fonts needed -->
   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.2.67/build/pdf.min.js" defer></script>
@@ -14,6 +21,10 @@
     <div class="welcome-stage">
       <p id="welcomeLine" class="welcome-line" aria-live="polite">欢迎来到多语阅读助手</p>
       <p id="welcomeHint" class="welcome-hint" data-i18n="welcomeTapHint">点击继续</p>
+      <label class="welcome-skip-control" for="welcomeSkipCheckbox">
+        <input id="welcomeSkipCheckbox" type="checkbox" />
+        <span data-i18n="welcomeDoNotShowAgain">不再显示</span>
+      </label>
     </div>
   </div>
   <div class="app-shell">
@@ -254,36 +265,55 @@
           <h3 data-i18n="archiveDetailTitle">聊天存档详情</h3>
           <button id="conversationDetailCloseBtn" class="icon-btn" aria-label="关闭聊天详情">&times;</button>
         </div>
-        <div class="archive-detail-body">
-          <h4 id="conversationDetailHeadline" class="archive-detail-headline">阅读随记</h4>
-          <p id="conversationDetailMeta" class="archive-detail-meta"></p>
+        <div class="archive-detail-layout">
+          <div class="archive-detail-body">
+            <h4 id="conversationDetailHeadline" class="archive-detail-headline">阅读随记</h4>
+            <p id="conversationDetailMeta" class="archive-detail-meta"></p>
 
-          <section class="archive-detail-section">
-            <h5 data-i18n="archiveDetailSummary">想法与回复总结</h5>
-            <p id="conversationDetailSummary"></p>
-          </section>
+            <section class="archive-detail-section">
+              <h5 data-i18n="archiveDetailSummary">想法与回复总结</h5>
+              <p id="conversationDetailSummary"></p>
+            </section>
 
-          <section class="archive-detail-section">
-            <h5 data-i18n="archiveDetailEvaluation">中性客观评价</h5>
-            <p id="conversationDetailEvaluation"></p>
-          </section>
+            <section class="archive-detail-section">
+              <h5 data-i18n="archiveDetailEvaluation">中性客观评价</h5>
+              <p id="conversationDetailEvaluation"></p>
+            </section>
 
-          <section class="archive-detail-section archive-messages-section">
-            <details id="conversationDetailMessagesPanel" class="archive-messages-panel">
-              <summary data-i18n="archiveDetailMessages">完整聊天记录</summary>
-              <div id="conversationDetailMessages" class="conversation-detail-list"></div>
-            </details>
-          </section>
+            <section class="archive-detail-section archive-messages-section">
+              <details id="conversationDetailMessagesPanel" class="archive-messages-panel">
+                <summary data-i18n="archiveDetailMessages">完整聊天记录</summary>
+                <div id="conversationDetailMessages" class="conversation-detail-list"></div>
+              </details>
+            </section>
 
-          <section class="archive-detail-section">
-            <h5 data-i18n="archiveDetailReflection">回顾感想</h5>
-            <textarea
-              id="conversationDetailReflection"
-              class="archive-reflection-input"
-              data-i18n-placeholder="archiveDetailReflectionPlaceholder"
-              placeholder="看完聊天记录后，写下你的回顾、收获或下一步计划..."
-            ></textarea>
-          </section>
+            <section class="archive-detail-section">
+              <h5 data-i18n="archiveDetailReflection">回顾感想</h5>
+              <div class="archive-reflection-editor">
+                <textarea
+                  id="conversationDetailReflection"
+                  class="archive-reflection-input"
+                  data-i18n-placeholder="archiveDetailReflectionPlaceholder"
+                  placeholder="看完聊天记录后，写下你的回顾、收获或下一步计划..."
+                ></textarea>
+                <div class="archive-reflection-actions">
+                  <button
+                    id="conversationDetailReflectionConfirmBtn"
+                    class="primary-btn secondary archive-reflection-confirm-btn"
+                    type="button"
+                    data-i18n="archiveDetailReflectionConfirm"
+                  >确认并显示到右侧</button>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="archive-detail-side" aria-live="polite">
+            <section class="archive-detail-section archive-reflection-preview-section">
+              <h5 data-i18n="archiveDetailReflectionPreviewTitle">已确认感想</h5>
+              <p id="conversationDetailReflectionPreview" class="archive-reflection-preview"></p>
+            </section>
+          </aside>
         </div>
       </div>
     </div>
