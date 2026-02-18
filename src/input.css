@@ -690,11 +690,30 @@ body {
   font-size: 12px;
 }
 
+.saved-word-delete {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color var(--transition), background var(--transition);
+}
+
+.saved-word-delete:hover {
+  color: var(--text);
+}
+
 .saved-word-card .saved-word-delete {
   position: static;
   margin-left: auto;
-  padding: 2px 6px;
-  font-size: 11px;
 }
 
 .word-card.saved-conversation-card {
@@ -735,12 +754,10 @@ body {
   color: var(--text-muted);
 }
 
-.saved-conversation-content-box {
+.conversation-card-preview {
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 0;
-  background: var(--surface-elevated);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 body.conversation-detail-open {

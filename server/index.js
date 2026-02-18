@@ -300,7 +300,7 @@ function toPublicUser(user) {
   if (!user) {
     return null;
   }
-  const username = String(user.username || user.email || '').trim();
+  const username = String(user.username || user.name || user.email || '').trim();
   return {
     id: String(user.id || ''),
     email: String(user.email || ''),
@@ -313,10 +313,7 @@ function toPublicUser(user) {
 
 function isValidUsername(username) {
   const value = String(username || '').trim();
-  if (value.length < 3 || value.length > 32) {
-    return false;
-  }
-  return !/\s/.test(value);
+  return value.length > 0;
 }
 
 function readJSONBody(req) {
@@ -366,11 +363,12 @@ async function handleAuthRegister(req, res) {
     return sendJSON(res, 400, { error: error.message || 'Invalid JSON payload' });
   }
 
-  const username = normalizeIdentifier(payload.username || payload.email);
+  const rawUsername = String(payload.username || payload.email || '').trim();
+  const username = normalizeIdentifier(rawUsername);
   const password = String(payload.password || '');
 
-  if (!isValidUsername(username)) {
-    return sendJSON(res, 400, { error: 'Invalid username (3-32 chars, no spaces)' });
+  if (!isValidUsername(rawUsername)) {
+    return sendJSON(res, 400, { error: 'Username is required' });
   }
   if (password.length < 6) {
     return sendJSON(res, 400, { error: 'Password must be at least 6 characters' });
@@ -381,7 +379,7 @@ async function handleAuthRegister(req, res) {
 
   try {
     const passwordHash = hashPassword(password);
-    const user = sqlStore.createUser({ email: username, name: username, passwordHash });
+    const user = sqlStore.createUser({ email: username, name: rawUsername, passwordHash });
     const session = sqlStore.createSession(user.id, SESSION_TTL_MS);
     const cookie = buildSessionCookie(session.token);
     return sendJSON(res, 200, {
@@ -403,9 +401,10 @@ async function handleAuthLogin(req, res) {
     return sendJSON(res, 400, { error: error.message || 'Invalid JSON payload' });
   }
 
-  const username = normalizeIdentifier(payload.username || payload.email);
+  const rawUsername = String(payload.username || payload.email || '').trim();
+  const username = normalizeIdentifier(rawUsername);
   const password = String(payload.password || '');
-  if (!username || !password) {
+  if (!isValidUsername(rawUsername) || !password) {
     return sendJSON(res, 400, { error: 'Missing username or password' });
   }
 

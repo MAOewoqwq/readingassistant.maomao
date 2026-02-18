@@ -143,7 +143,7 @@ const I18N_TRANSLATIONS = {
     authModeLogin: '登录',
     authModeRegister: '注册',
     authUsername: '用户名',
-    authUsernamePlaceholder: '请输入用户名（3-32位）',
+    authUsernamePlaceholder: '请输入用户名',
     authPassword: '密码',
     authPasswordPlaceholder: '请输入密码（至少6位）',
     authSubmitLogin: '登录',
@@ -260,7 +260,7 @@ const I18N_TRANSLATIONS = {
     authModeLogin: 'Login',
     authModeRegister: 'Sign up',
     authUsername: 'Username',
-    authUsernamePlaceholder: 'Enter username (3-32 chars)',
+    authUsernamePlaceholder: 'Enter username',
     authPassword: 'Password',
     authPasswordPlaceholder: 'Enter password (min 6 chars)',
     authSubmitLogin: 'Login',
@@ -377,7 +377,7 @@ const I18N_TRANSLATIONS = {
     authModeLogin: 'ログイン',
     authModeRegister: '登録',
     authUsername: 'ユーザー名',
-    authUsernamePlaceholder: 'ユーザー名を入力（3-32文字）',
+    authUsernamePlaceholder: 'ユーザー名を入力',
     authPassword: 'パスワード',
     authPasswordPlaceholder: 'パスワードを入力（6文字以上）',
     authSubmitLogin: 'ログイン',
@@ -1433,7 +1433,7 @@ async function initializeCloudAuth() {
 }
 
 function normalizeAuthUsername(raw) {
-  return String(raw || '').trim().toLowerCase();
+  return String(raw || '').trim();
 }
 
 async function handleCloudAuthLogin() {
@@ -1446,11 +1446,6 @@ async function handleAuthModalSubmit() {
   const password = String(elements.authPasswordInput?.value || '');
 
   if (!username) {
-    setAuthModalHint(t('authUsernamePlaceholder'), { isError: true });
-    elements.authUsernameInput?.focus();
-    return;
-  }
-  if (username.length < 3 || username.length > 32 || /\s/.test(username)) {
     setAuthModalHint(t('authUsernamePlaceholder'), { isError: true });
     elements.authUsernameInput?.focus();
     return;
@@ -4938,12 +4933,9 @@ function refreshSavedWordLog() {
       const title = document.createElement('h3');
       title.textContent = item.word || wordKey;
 
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'ghost-btn small saved-word-delete';
-      deleteBtn.type = 'button';
+      const deleteBtn = createSavedLogDeleteButton();
       deleteBtn.dataset.removeDate = dateKey;
       deleteBtn.dataset.removeWord = wordKey;
-      deleteBtn.textContent = t('delete');
 
       header.appendChild(title);
       header.appendChild(deleteBtn);
@@ -4973,6 +4965,17 @@ function refreshSavedWordLog() {
 
 function getConversationSourceLabel(source) {
   return source === 'ai' ? t('archiveSourceAI') : t('archiveSourceLocal');
+}
+
+function createSavedLogDeleteButton() {
+  const deleteBtn = document.createElement('button');
+  const deleteLabel = t('delete');
+  deleteBtn.className = 'saved-word-delete';
+  deleteBtn.type = 'button';
+  deleteBtn.textContent = '×';
+  deleteBtn.setAttribute('aria-label', deleteLabel);
+  deleteBtn.title = deleteLabel;
+  return deleteBtn;
 }
 
 function getConversationPreview(entry) {
@@ -5031,23 +5034,19 @@ function refreshSavedConversationLog() {
       const time = entry?.savedAt ? new Date(entry.savedAt).toLocaleTimeString() : '--:--';
       title.textContent = trimArchiveTitle(entry?.title || '', ARCHIVE_TITLE_MAX_CHARS) || `存档${time}`;
 
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'ghost-btn small saved-word-delete';
-      deleteBtn.type = 'button';
+      const deleteBtn = createSavedLogDeleteButton();
       deleteBtn.dataset.removeDate = dateKey;
       deleteBtn.dataset.removeConversation = archiveId;
-      deleteBtn.textContent = t('delete');
 
       header.appendChild(title);
       header.appendChild(deleteBtn);
 
       const meta = document.createElement('p');
       meta.className = 'conversation-card-meta';
-      const turns = Number(entry?.messageCount) || 0;
-      meta.textContent = `${time} · ${getConversationSourceLabel(entry?.source)} · ${turns} ${t('archiveTurnsUnit')}`;
+      meta.textContent = time;
 
       const preview = document.createElement('p');
-      preview.className = 'saved-conversation-content-box';
+      preview.className = 'conversation-card-preview';
       preview.textContent = getConversationPreview(entry);
 
       card.appendChild(header);
@@ -5094,7 +5093,7 @@ function renderConversationArchiveMessages(messages) {
 
     const role = document.createElement('p');
     role.className = 'conversation-detail-role';
-    role.textContent = item.role === 'user' ? t('archiveRoleUser') : t('archiveRoleAssistant');
+    role.textContent = getConversationArchiveRoleLabel(item.role);
 
     const content = document.createElement('p');
     content.className = 'conversation-detail-content';
@@ -5107,6 +5106,27 @@ function renderConversationArchiveMessages(messages) {
 
   elements.conversationDetailMessages.innerHTML = '';
   elements.conversationDetailMessages.appendChild(fragment);
+}
+
+function getConversationArchiveRoleLabel(role) {
+  const normalizedRole = role === 'assistant' ? 'assistant' : 'user';
+  if (normalizedRole === 'user') {
+    if (!isCloudEnabled()) {
+      return t('archiveRoleUser');
+    }
+    const userLabel = getPublicUserLabel();
+    return userLabel || t('archiveRoleUser');
+  }
+
+  if (!isCloudEnabled()) {
+    return t('archiveRoleAssistant');
+  }
+
+  const assistantLabel = String(state.assistant?.label || '').trim();
+  if (!assistantLabel || assistantLabel === DEFAULT_ASSISTANT_LABEL) {
+    return t('archiveRoleAssistant');
+  }
+  return assistantLabel;
 }
 
 function renderConversationArchiveDetail(entry) {
