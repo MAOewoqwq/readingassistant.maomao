@@ -174,6 +174,7 @@ const I18N_TRANSLATIONS = {
     onboardingWordsDesc: '点击文章中的词，这里会自动记录并可保存。',
     onboardingAssistantTitle: '这是 AI 助手入口',
     onboardingAssistantDesc: '点击右下角按钮，随时提问、复述和存档聊天。',
+    selectionTranslating: '翻译中…',
   },
   en: {
     appTitle: 'Multilingual Reading Assistant',
@@ -291,6 +292,7 @@ const I18N_TRANSLATIONS = {
     onboardingWordsDesc: 'Clicked words are auto-collected here and can be saved.',
     onboardingAssistantTitle: 'AI assistant entry',
     onboardingAssistantDesc: 'Tap the bottom-right button to ask, summarize, and archive chats.',
+    selectionTranslating: 'Translating…',
   },
   ja: {
     appTitle: '多言語読書アシスタント',
@@ -408,6 +410,7 @@ const I18N_TRANSLATIONS = {
     onboardingWordsDesc: '記事内の単語をクリックするとここに自動記録されます。',
     onboardingAssistantTitle: 'AIアシスタント入口',
     onboardingAssistantDesc: '右下ボタンから質問・要約・アーカイブができます。',
+    selectionTranslating: '翻訳中…',
   },
 };
 
@@ -4261,15 +4264,19 @@ function buildSelectionMeanings(zhText = '', enText = '', jaText = '') {
   const en = String(enText || '').trim();
   const ja = String(jaText || '').trim();
   if (zh) {
-    meanings.push({ pos: getLanguageLabel('zh'), zh });
+    meanings.push({ language: 'zh', pos: getLanguageLabel('zh'), zh });
   }
   if (en) {
-    meanings.push({ pos: getLanguageLabel('en'), zh: en });
+    meanings.push({ language: 'en', pos: getLanguageLabel('en'), zh: en });
   }
   if (ja) {
-    meanings.push({ pos: getLanguageLabel('ja'), zh: ja });
+    meanings.push({ language: 'ja', pos: getLanguageLabel('ja'), zh: ja });
   }
   return meanings;
+}
+
+function hasEnglishLetters(text) {
+  return /[A-Za-z]/.test(String(text || ''));
 }
 
 function isSingleWordSelection(text, language = '') {
@@ -4426,9 +4433,22 @@ async function handleArticleSelectionLookup() {
     return;
   }
 
+  showTooltip(null, {
+    word: payload.selectedText,
+    requested: payload.selectedText,
+    phonetics: '',
+    meanings: [],
+    derivatives: [],
+    language: payload.language,
+    mode: 'phrase',
+    baseForm: '',
+    loading: true,
+  }, { anchorRect: payload.anchorRect });
+
   const selectionResult = await fetchSelectionAnalysis(payload.selectedText, payload.language, payload.context);
   let resolvedWord = String(selectionResult?.surface || payload.selectedText || '').trim();
   if (!resolvedWord) {
+    hideTooltip();
     return;
   }
 
@@ -4496,6 +4516,14 @@ async function handleArticleSelectionLookup() {
       if (!jaText) {
         jaText = extractMeaningText(jaDetail);
       }
+    }
+  }
+
+  if (selectionMode === 'phrase' && sourceLanguage === 'ja' && !hasEnglishLetters(enText)) {
+    const enFallbackDetail = await fetchGroqTranslation(resolvedWord, 'ja', 'en');
+    const enFallbackText = extractMeaningText(enFallbackDetail);
+    if (hasEnglishLetters(enFallbackText)) {
+      enText = enFallbackText;
     }
   }
 
@@ -5572,11 +5600,12 @@ function showTooltip(anchor, detail, { anchorRect = null } = {}) {
 
   // 多语言朗读：仅显示一个喇叭按钮
   const wordText = detail.requested || detail.word || anchor?.dataset?.word || '';
+  const isTooltipLoading = Boolean(detail?.loading);
   const wordLanguage = normalizeWordLanguage(detail.language, wordText);
   const showEnglishPronunciation = wordLanguage === 'en';
   const showGeneralPronunciation = ['zh', 'ja'].includes(wordLanguage);
   if (elements.playUsBtn) {
-    if (showEnglishPronunciation || showGeneralPronunciation) {
+    if (!isTooltipLoading && (showEnglishPronunciation || showGeneralPronunciation)) {
       elements.playUsBtn.style.display = '';
       elements.playUsBtn.textContent = '🔈';
       if (showEnglishPronunciation) {
@@ -5594,15 +5623,30 @@ function showTooltip(anchor, detail, { anchorRect = null } = {}) {
 
   elements.tooltipWord.textContent = wordText;
   const body = document.createElement('div');
+  const tooltipMode = String(detail?.mode || '').trim();
+  const showAuxPronunciationInfo = tooltipMode !== 'phrase';
 
-  if (detail.phonetics) {
+  if (isTooltipLoading) {
+    const loading = document.createElement('div');
+    loading.className = 'tooltip-loading';
+    const spinner = document.createElement('span');
+    spinner.className = 'tooltip-loading-spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span');
+    text.textContent = t('selectionTranslating');
+    loading.appendChild(spinner);
+    loading.appendChild(text);
+    body.appendChild(loading);
+  }
+
+  if (!isTooltipLoading && showAuxPronunciationInfo && detail.phonetics) {
     const phonetic = document.createElement('div');
     phonetic.className = 'phonetic';
     phonetic.textContent = detail.phonetics;
     body.appendChild(phonetic);
   }
 
-  const baseForm = getDisplayBaseForm(detail);
+  const baseForm = !isTooltipLoading && showAuxPronunciationInfo ? getDisplayBaseForm(detail) : '';
   if (baseForm) {
     const base = document.createElement('div');
     base.className = 'phonetic';
@@ -5610,8 +5654,17 @@ function showTooltip(anchor, detail, { anchorRect = null } = {}) {
     body.appendChild(base);
   }
 
-  if (detail.meanings?.length) {
-    detail.meanings.forEach((meaning) => {
+  const sourceLanguage = normalizeWordLanguage(detail?.language, wordText);
+  const displayMeanings = (detail.meanings || []).filter((meaning) => {
+    if (tooltipMode !== 'phrase') {
+      return true;
+    }
+    const meaningLanguage = String(meaning?.language || '').trim().toLowerCase();
+    return meaningLanguage !== sourceLanguage;
+  });
+
+  if (!isTooltipLoading && displayMeanings.length) {
+    displayMeanings.forEach((meaning) => {
       const block = document.createElement('div');
       block.className = 'meaning';
       const heading = document.createElement('strong');

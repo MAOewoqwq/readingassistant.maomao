@@ -1813,6 +1813,23 @@ body.saved-log-open {
   font-size: 14px;
 }
 
+.tooltip-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.tooltip-loading-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text);
+  border-radius: 999px;
+  animation: tooltip-loading-spin 700ms linear infinite;
+}
+
 .tooltip-body .phonetic {
   font-size: 13px;
   color: var(--text-muted);
@@ -2010,6 +2027,12 @@ html.welcome-skip-persisted .welcome-overlay {
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes tooltip-loading-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
