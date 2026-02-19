@@ -6,6 +6,7 @@ const REPORT_KEY = 'assistant-reports';
 const LANGUAGE_KEY = 'reader-language';
 const SAVED_WORD_LOG_KEY = 'reader-saved-word-logs';
 const CONVERSATION_LOG_KEY = 'assistant-conversation-logs';
+const GLOBAL_WORD_COLLECTION_ID = '__global-word-collection__';
 
 function setItemIfChanged(key, nextValue) {
   try {
@@ -40,21 +41,55 @@ function writeStorage(data) {
   }
 }
 
+function buildGlobalWordCollectionFromLegacy(store) {
+  if (!store || typeof store !== 'object') {
+    return null;
+  }
+  const merged = {};
+  Object.entries(store).forEach(([articleKey, payload]) => {
+    if (articleKey === GLOBAL_WORD_COLLECTION_ID || !payload || typeof payload !== 'object') {
+      return;
+    }
+    Object.entries(payload).forEach(([wordKey, detail]) => {
+      const current = merged[wordKey];
+      const currentAt = Number(current?.clickedAt) || 0;
+      const nextAt = Number(detail?.clickedAt) || 0;
+      if (!current || nextAt >= currentAt) {
+        merged[wordKey] = detail;
+      }
+    });
+  });
+  return Object.keys(merged).length ? merged : null;
+}
+
 export function loadSession(articleId) {
+  void articleId;
   const store = readStorage();
-  return store[articleId] ?? null;
+  const globalSession = store[GLOBAL_WORD_COLLECTION_ID];
+  if (globalSession && typeof globalSession === 'object') {
+    return globalSession;
+  }
+  const migrated = buildGlobalWordCollectionFromLegacy(store);
+  if (!migrated) {
+    return null;
+  }
+  store[GLOBAL_WORD_COLLECTION_ID] = migrated;
+  writeStorage(store);
+  return migrated;
 }
 
 export function saveSession(articleId, payload) {
+  void articleId;
   const store = readStorage();
-  store[articleId] = payload;
+  store[GLOBAL_WORD_COLLECTION_ID] = payload;
   writeStorage(store);
 }
 
 export function clearSession(articleId) {
+  void articleId;
   const store = readStorage();
-  if (store[articleId]) {
-    delete store[articleId];
+  if (store[GLOBAL_WORD_COLLECTION_ID]) {
+    delete store[GLOBAL_WORD_COLLECTION_ID];
     writeStorage(store);
   }
 }
@@ -63,9 +98,6 @@ export function clearAllSessions() {
   try {
     window.localStorage.removeItem(STORAGE_KEY);
     window.localStorage.removeItem(LAST_ARTICLE_KEY);
-    window.localStorage.removeItem(REPORT_KEY);
-    window.localStorage.removeItem(SAVED_WORD_LOG_KEY);
-    window.localStorage.removeItem(CONVERSATION_LOG_KEY);
   } catch (error) {
     console.warn('[Storage] clear all error:', error);
   }

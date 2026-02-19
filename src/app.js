@@ -1,6 +1,7 @@
 import {
   loadSession,
   saveSession,
+  clearAllSessions,
   saveLastArticle,
   loadLastArticle,
   saveAssistantLabel,
@@ -48,6 +49,7 @@ const JA_TTS_SEGMENT_MAX_CHARS = 30;
 const CLOUD_SYNC_DEBOUNCE_MS = 800;
 const REFLECTION_SAVE_DEBOUNCE_MS = 500;
 const WELCOME_FADE_OUT_MS = 180;
+const WORD_LOG_ARTICLE_ID = 'global-word-log';
 const WELCOME_SEEN_STORAGE_ID = 'reader-welcome-seen-v1';
 const ONBOARDING_SEEN_STORAGE_ID = 'reader-onboarding-seen-v1';
 const ASSISTANT_SYSTEM_PROMPT = 'You are a friendly multilingual reading buddy. Discuss the reading content with the user like a friend, not like a lecturer. Keep every single reply short to avoid reading fatigue (prefer 2-4 concise sentences, unless the user explicitly asks for more). Prioritize back-and-forth conversation and often include a natural follow-up question to invite the user to respond. By default, reply in the same language as the user\'s latest message. If the user explicitly asks for a different response language, follow that instruction. Keep the main direction of your answers aligned with the provided reading context and the current user message. If the user asks what a concept in the article means, explain it clearly and accurately based on the reading content. If the user asks a conceptual question unrelated to the reading content, still answer it accurately and concisely. Output plain text only: do not use markdown, do not use any asterisks (*), and do not output garbled text or mojibake symbols. Use clean natural UTF-8 characters only. When the user indicates they finished reading, start a Feynman-style loop: ask for a key-point summary, request an example or analogy, point out gaps or misunderstandings, then provide 1-2 self-test questions and a brief recap.';
@@ -1353,8 +1355,14 @@ function mergeArticleLogsAndPersist(articleId, cloudLog = {}, { refreshUI = true
   saveSavedWordLog(articleId, mergedSavedWordLog);
   saveConversationLog(articleId, mergedConversationLog);
 
-  if (state.articleId === articleId) {
+  if (articleId === WORD_LOG_ARTICLE_ID) {
     state.savedWordLog = buildSavedWordLogMap(mergedSavedWordLog);
+    if (refreshUI) {
+      refreshSavedLogPanel();
+    }
+  }
+
+  if (state.articleId === articleId) {
     state.savedConversationLog = buildConversationLogMap(mergedConversationLog);
     if (refreshUI) {
       refreshSavedLogPanel();
@@ -1400,6 +1408,7 @@ async function bootstrapCloudLogs() {
     const cloudLogs = payload?.logs && typeof payload.logs === 'object' ? payload.logs : {};
     const localArticleIds = listSavedLogArticleIds();
     const articleIds = new Set([...localArticleIds, ...Object.keys(cloudLogs)]);
+    articleIds.add(WORD_LOG_ARTICLE_ID);
     articleIds.add('global-assistant');
 
     articleIds.forEach((articleId) => {
@@ -1594,6 +1603,9 @@ async function initializeAppCore() {
   updateReportExportState();
   renderAppLabel();
   updateBionicButton();
+  state.savedWordLog = buildSavedWordLogMap(
+    normalizeSavedWordLogByDate(loadSavedWordLog(WORD_LOG_ARTICLE_ID)),
+  );
   const globalConversationLog = normalizeConversationLogByDate(loadConversationLog('global-assistant'));
   state.savedConversationLog = buildConversationLogMap(globalConversationLog);
   await initializeCloudAuth();
@@ -2181,11 +2193,17 @@ function playClearCacheAnimation() {
 }
 
 function handleClearAllCache() {
+  if (state.articleId && getPendingWordEntries().length > 0) {
+    saveCurrentWordsToLog();
+  }
+  clearAllSessions();
   state.articleId = null;
   state.rawText = '';
   state.tokens = [];
   state.clickedWords = new Map();
-  state.savedWordLog = new Map();
+  state.savedWordLog = buildSavedWordLogMap(
+    normalizeSavedWordLogByDate(loadSavedWordLog(WORD_LOG_ARTICLE_ID)),
+  );
   state.savedConversationLog = buildConversationLogMap(
     normalizeConversationLogByDate(loadConversationLog('global-assistant')),
   );
@@ -2210,7 +2228,7 @@ function handleClearAllCache() {
   setReportStatus('');
   setAssistantStatus('');
   renderArticle();
-  setExportStatus('已清空当前载入文本，可重新粘贴新文本。');
+  setExportStatus('已清空本页文本缓存，生词与日志已保留。');
   playClearCacheAnimation();
 }
 
@@ -2915,7 +2933,7 @@ function loadArticle(text) {
 
   const session = loadSession(state.articleId);
   const report = loadConversationReport(state.articleId);
-  const savedLog = loadSavedWordLog(state.articleId);
+  const savedLog = loadSavedWordLog(WORD_LOG_ARTICLE_ID);
   const conversationLog = loadConversationLog(state.articleId);
 
   state.assistant.articleContext = buildArticleSnippet(normalizedText);
@@ -2936,7 +2954,7 @@ function loadArticle(text) {
   }
   const normalizedSavedLog = normalizeSavedWordLogByDate(savedLog);
   state.savedWordLog = buildSavedWordLogMap(normalizedSavedLog);
-  saveSavedWordLog(state.articleId, normalizedSavedLog);
+  saveSavedWordLog(WORD_LOG_ARTICLE_ID, normalizedSavedLog);
   const normalizedConversationLog = normalizeConversationLogByDate(conversationLog);
   state.savedConversationLog = buildConversationLogMap(normalizedConversationLog);
   saveConversationLog(state.articleId, normalizedConversationLog);
@@ -2970,6 +2988,7 @@ function loadArticle(text) {
   renderArticle();
   refreshWordList();
   refreshSavedLogPanel();
+  void syncArticleFromCloud(WORD_LOG_ARTICLE_ID);
   void syncArticleFromCloud(state.articleId);
 }
 
@@ -4867,7 +4886,7 @@ function saveCurrentWordsToLog() {
     return;
   }
 
-  const stored = normalizeSavedWordLogByDate(loadSavedWordLog(state.articleId));
+  const stored = normalizeSavedWordLogByDate(loadSavedWordLog(WORD_LOG_ARTICLE_ID));
   const merged = { ...stored };
   const dateKey = getTodayDateKey();
   const dayBucket = { ...(merged[dateKey] || {}) };
@@ -4892,8 +4911,8 @@ function saveCurrentWordsToLog() {
 
   merged[dateKey] = dayBucket;
 
-  saveSavedWordLog(state.articleId, merged);
-  scheduleCloudArticleSync(state.articleId);
+  saveSavedWordLog(WORD_LOG_ARTICLE_ID, merged);
+  scheduleCloudArticleSync(WORD_LOG_ARTICLE_ID);
   pendingEntries.forEach(([wordKey, detail]) => {
     state.clickedWords.set(wordKey, {
       ...detail,
@@ -4908,7 +4927,7 @@ function saveCurrentWordsToLog() {
   }
   refreshWordList();
   refreshSavedLogPanel();
-  setExportStatus('已保存到本篇生词日志，并自动清空当前生词集合。');
+  setExportStatus('已保存到生词日志，并自动清空当前生词集合。');
 }
 
 function setSavedLogDateFilter(dateKey) {
@@ -5494,8 +5513,8 @@ function removeSavedWord(dateKey, wordKey) {
     state.savedWordLog.set(dateKey, dayMap);
   }
 
-  saveSavedWordLog(state.articleId, mapToSavedWordLogObject(state.savedWordLog));
-  scheduleCloudArticleSync(state.articleId);
+  saveSavedWordLog(WORD_LOG_ARTICLE_ID, mapToSavedWordLogObject(state.savedWordLog));
+  scheduleCloudArticleSync(WORD_LOG_ARTICLE_ID);
   refreshSavedLogPanel();
   setExportStatus('已删除该条生词日志。');
 }
@@ -5522,10 +5541,10 @@ function clearCurrentSavedLog() {
   state.savedWordLog = new Map();
   state.savedLogDateFilter = '';
   setSavedLogWordLanguageFilter('all');
-  clearSavedWordLog(state.articleId);
-  scheduleCloudArticleSync(state.articleId);
+  clearSavedWordLog(WORD_LOG_ARTICLE_ID);
+  scheduleCloudArticleSync(WORD_LOG_ARTICLE_ID);
   refreshSavedLogPanel();
-  setExportStatus('已清空本篇生词日志。');
+  setExportStatus('已清空生词日志。');
 }
 
 function removeSavedConversation(dateKey, archiveId) {
