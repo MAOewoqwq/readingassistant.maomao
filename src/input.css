@@ -391,9 +391,17 @@ body {
 
 .article-content mark.copied-mark {
   background: transparent;
-  text-decoration: underline;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-thickness: 2px;
   text-decoration-color: var(--text-muted);
   text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+  -webkit-text-decoration-skip: none;
+}
+
+.article-content mark.copied-mark .word.en-word {
+  padding: 0;
 }
 
 .article-content span.clicked {

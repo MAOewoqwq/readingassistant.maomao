@@ -4440,11 +4440,6 @@ async function handleArticleSelectionLookup() {
   state.lastSelectionSignature = signature;
   state.lastSelectionAt = now;
 
-  const selection = window.getSelection();
-  if (selection && !selection.isCollapsed) {
-    selection.removeAllRanges();
-  }
-
   if (isSingleWordSelection(payload.selectedText, payload.language)) {
     await handleWordClick(null, payload.selectedText, -1, { anchorRect: payload.anchorRect });
     const langLabel = getLanguageLabel(payload.language || detectWordLanguage(payload.selectedText));
